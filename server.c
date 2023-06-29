@@ -26,6 +26,34 @@ struct Client_conn
 
 static struct Client_conn client_cs[MAXCONN];
 
+struct Job *init_job(int deadtime, int cpus_per_task)
+{
+    struct Job *j = (struct Job *)malloc(sizeof(struct Job));
+    j->jobid = get_new_jobid();
+    j->deadtime = deadtime;
+    j->cpus_per_task = cpus_per_task;
+    j->status = JobIntializing;
+    return j;
+}
+
+enum JobStatus s_create_job(int s, struct Msg *m)
+{
+    struct Job *job = init_job(m->newjob.deadtime, m->newjob.cpus_per_task);
+    int res;
+    fprintf(logfile, "%i\n", m->newjob.command_size);
+    if (m->newjob.command_size > 0)
+    {
+        job->command = (char *)malloc(m->newjob.command_size + 1);
+        res = recv_bytes(s, job->command, m->newjob.command_size);
+        if (res == -1)
+            fprintf(logfile, "wrong bytes received");
+        fprintf(logfile, "%s\n", job->command);
+    }
+    add_job(job);
+
+    return job->status;
+}
+
 enum MsgType client_read(int idx)
 {
     struct Msg msg;
@@ -48,13 +76,17 @@ enum MsgType client_read(int idx)
     {
     case KillServer:
         fprintf(logfile, "read kill server\n");
-        return KillServer;
+        break;
+    case SubmitJob:
+        fprintf(logfile, "read submit job\n");
+        s_create_job(client_cs[idx].socket, &msg);
+        break;
     default:
         fprintf(logfile, "Unknown message type\n");
-        return Unknown;
+        break;
     }
 
-    return 0;
+    return msg.type;
 }
 
 static void remove_connection(int index)
@@ -188,6 +220,7 @@ void end_server(int socket)
 
     free(path);
     free(logpath);
+    remove_all_jobs();
 }
 
 void notify_parent(int fd)

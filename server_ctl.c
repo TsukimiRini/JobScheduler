@@ -142,7 +142,10 @@ int server_down()
     return 0;
 }
 
-int submit_job()
+int submit_job(char **cmd)
 {
+    create_socket(&socket_path);
+    int res = try_connect(server_socket);
+    c_submit_job(server_socket, cmd, NULL, 1, 1);
     return 0;
 }

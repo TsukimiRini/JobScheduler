@@ -4,8 +4,15 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "main.h"
+
+struct Msg default_msg() {
+    struct Msg m;
+    memset(&m, 0, sizeof(struct Msg));
+    return m;
+}
 
 void send_bytes(const int fd, const char *data, int bytes)
 {
