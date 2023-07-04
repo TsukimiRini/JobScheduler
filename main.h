@@ -11,11 +11,13 @@ enum MsgType
 
 enum JobStatus
 {
-    JobIntializing,
-    JobRunning,
-    JobFinished,
-    JobFailed,
-    JobCanceled,
+    Intializing,
+    Running,
+    Finished,
+    Failed,
+    Canceled,
+    Queued,
+    Pending,
 };
 
 enum SubmitStatus

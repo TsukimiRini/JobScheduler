@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -7,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sched.h>
 
 #include "main.h"
 
@@ -32,7 +34,7 @@ struct Job *init_job(int deadtime, int cpus_per_task)
     j->jobid = get_new_jobid();
     j->deadtime = deadtime;
     j->cpus_per_task = cpus_per_task;
-    j->status = JobIntializing;
+    j->status = Intializing;
     return j;
 }
 
