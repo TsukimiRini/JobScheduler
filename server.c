@@ -109,9 +109,10 @@ static void remove_connection(int index)
 {
     int i;
 
-    // if (client_cs[index].hasjob) {
-    //     s_removejob(client_cs[index].jobid);
-    // }
+    if (client_cs[index].hasjob)
+    {
+        remove_job(client_cs[index].jobid, logfile);
+    }
 
     for (i = index; i < (nconnections - 1); ++i)
     {
@@ -272,7 +273,7 @@ void notify_client_to_run_job(struct Job *j, cpu_set_t cpus_to_occupy)
     if (conn == -1)
     {
         fprintf(logfile, "no connection for job %d\n", j->jobid);
-        remove_job(j, logfile);
+        remove_job(j->jobid, logfile);
         return;
     }
 

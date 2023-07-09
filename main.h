@@ -92,7 +92,7 @@ void wait_for_server_command(int server_socket);
 int get_new_jobid();
 struct Job *init_queued_job(int deadtime, int cpus_per_task);
 void add_job(struct Job *j, FILE *logfile);
-void remove_job(struct Job *j, FILE *logfile);
+void remove_job(int jobid, FILE *logfile);
 void remove_all_jobs(FILE *logfile);
 struct Job *get_next_job_to_run(int free_cpu, FILE *log);
 void mark_job_as_running(struct Job *j);

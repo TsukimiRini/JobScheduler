@@ -23,6 +23,20 @@ struct Job *init_queued_job(int deadtime, int cpus_per_task)
   return j;
 }
 
+struct Job *find_job(int jobid)
+{
+  struct Job *cur = queued_jobs;
+  while (cur != NULL)
+  {
+    if (cur->jobid == jobid)
+    {
+      return cur;
+    }
+    cur = cur->next;
+  }
+  return NULL;
+}
+
 void add_job(struct Job *j, FILE *log)
 {
   fprintf(log, "Adding job %d\n", j->jobid);
@@ -39,8 +53,9 @@ void add_job(struct Job *j, FILE *log)
   cur->next = j;
 }
 
-void remove_job(struct Job *j, FILE *log)
+void remove_job(int id, FILE *log)
 {
+  struct Job *j = find_job(id);
   fprintf(log, "Removing job %d\n", j->jobid);
   fflush(log);
   if (queued_jobs == j)
