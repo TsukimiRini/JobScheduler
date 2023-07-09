@@ -116,6 +116,8 @@ struct Job *get_next_job_to_run(int free_cpu, FILE *log)
 {
   if (queued_jobs == NULL)
     return NULL;
+  if (free_cpu <= 0)
+    return NULL;
   struct Job *cur = queued_jobs;
 
   while (cur != NULL)
