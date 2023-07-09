@@ -53,30 +53,37 @@ void add_job(struct Job *j, FILE *log)
   cur->next = j;
 }
 
-void remove_job(int id, FILE *log)
+void add_job_to_finished(struct Job *j)
 {
-  struct Job *j = find_job(id);
-  fprintf(log, "Removing job %d\n", j->jobid);
-  fflush(log);
-  if (queued_jobs == j)
+  j->next = finished_jobs;
+  finished_jobs = j;
+}
+
+struct Job *delete_job_from_queued(struct Job *j)
+{
+  struct Job *cur = queued_jobs;
+  if (cur == j)
   {
     queued_jobs = j->next;
-    free(j);
-    return;
+    return j;
   }
-  struct Job *cur = queued_jobs;
   while (cur->next != j)
   {
     if (cur->next == NULL)
     {
-      fprintf(log, "Job %d not found\n", j->jobid);
-      return;
+      return j;
     }
     cur = cur->next;
   }
   cur->next = j->next;
+  return j;
+}
+
+void remove_job(int id)
+{
+  struct Job *j = find_job(id);
+  delete_job_from_queued(j);
   free(j);
-  fflush(log);
 }
 
 void remove_all_jobs(FILE *fp)
@@ -136,7 +143,19 @@ struct Job *get_next_job_to_run(int free_cpu, FILE *log)
   return NULL;
 }
 
+void mark_job_as_allocating(struct Job *j)
+{
+  j->status = Allocating;
+}
+
 void mark_job_as_running(struct Job *j)
 {
   j->status = Running;
+}
+
+void mark_job_as_finished(struct Job *j)
+{
+  j->status = Finished;
+  delete_job_from_queued(j);
+  add_job_to_finished(j);
 }

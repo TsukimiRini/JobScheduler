@@ -64,26 +64,96 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
     }
 
     msg.type = SubmitResponse_S;
+    msg.submit_response.jobid = job->jobid;
     msg.submit_response.job_status = status;
     send_msg(s, &msg);
     fflush(logfile);
     return status;
 }
 
+void finish_job(struct Job *job)
+{
+    fprintf(logfile, "finish job\n");
+    available_cpu_num += job->cpus_per_task;
+    CPU_XOR(&occupied_cpus, &job->occupied_cpus, &occupied_cpus);
+    fprintf(logfile, "available cpu num: %d\n", available_cpu_num);
+}
+
+void handle_job_run(int idx, struct Msg *m)
+{
+    fprintf(logfile, "handle job run\n");
+    int s = client_cs[idx].socket;
+    struct Job *job = find_job(client_cs[idx].jobid);
+
+    if (job == NULL)
+    {
+        fprintf(logfile, "job not found\n");
+        clean_after_client_disappeared(s, idx);
+    }
+    else
+    {
+        fprintf(logfile, "job found\n");
+        mark_job_as_running(job);
+        job->pid = m->runjob_ok.pid;
+        job->starttime = m->runjob_ok.starttime;
+        fprintf(logfile, "job pid: %d\n", job->pid);
+        fprintf(logfile, "job starttime: %ld\n", job->starttime.tv_sec + job->starttime.tv_usec / 1000000);
+    }
+    fflush(logfile);
+}
+
+void handle_job_ended(int idx, struct Msg *m)
+{
+    int s = client_cs[idx].socket;
+    struct Job *job = find_job(client_cs[idx].jobid);
+    if (job == NULL)
+    {
+        fprintf(logfile, "job not found\n");
+    }
+    else
+    {
+        mark_job_as_finished(job);
+        finish_job(job);
+        job->endtime = m->job_ended.endtime;
+        switch (m->job_ended.exit_status)
+        {
+        case Return:
+            job->status = Finished;
+            break;
+        case Error:
+            job->status = Failed;
+            break;
+        case Signal:
+            job->status = Cancelled;
+            break;
+        default:
+            fprintf(logfile, "Unknown exit status\n");
+            break;
+        }
+        fprintf(logfile, "job endtime: %ld\n", job->endtime.tv_sec + job->endtime.tv_usec / 1000000);
+        fprintf(logfile, "job duration: %ld\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000);
+    }
+
+    clean_after_client_disappeared(s, idx);
+    fflush(logfile);
+}
+
 enum MsgType client_read(int idx)
 {
     struct Msg msg;
-    int res = recv_msg(client_cs[idx].socket, &msg);
+    int s = client_cs[idx].socket;
+    int res = recv_msg(s, &msg);
 
     if (res == -1)
     {
         fprintf(logfile, "client recv failed\n");
-        // clean_after_client_disappeared(s, index);
+        clean_after_client_disappeared(s, idx);
         return Unknown;
     }
     else if (res == 0)
     {
-        // clean_after_client_disappeared(s, index);
+        fprintf(logfile, "client disconnected\n");
+        clean_after_client_disappeared(s, idx);
         return Unknown;
     }
 
@@ -97,6 +167,14 @@ enum MsgType client_read(int idx)
         fprintf(logfile, "read submit job\n");
         enum JobStatus ret_s = s_create_job(idx, &msg);
         fprintf(logfile, "job status: %d\n", ret_s);
+        break;
+    case RunJobOk_C:
+        fprintf(logfile, "read run job ok\n");
+        handle_job_run(idx, &msg);
+        break;
+    case JobEnded_C:
+        fprintf(logfile, "read job ended\n");
+        handle_job_ended(idx, &msg);
         break;
     default:
         fprintf(logfile, "Unknown message type\n");
@@ -112,7 +190,7 @@ static void remove_connection(int index)
 
     if (client_cs[index].hasjob)
     {
-        remove_job(client_cs[index].jobid, logfile);
+        remove_job(client_cs[index].jobid);
     }
 
     for (i = index; i < (nconnections - 1); ++i)
@@ -126,7 +204,8 @@ void clean_after_client_disappeared(int socket, int index)
 {
     /* Act as if the job ended. */
     int jobid = client_cs[index].jobid;
-    if (client_cs[index].hasjob) {
+    if (client_cs[index].hasjob)
+    {
         // struct Result r;
 
         // r.errorlevel = -1;
@@ -150,6 +229,7 @@ void clean_after_client_disappeared(int socket, int index)
         client_cs[index].hasjob = 0;
     }
 
+    fprintf(logfile, "clean client\n");
     close(socket);
     remove_connection(index);
 }
@@ -228,7 +308,9 @@ void server_loop(int socket)
                 fflush(logfile);
                 notify_client_to_run_job(j, cpus_to_occupy);
                 if (j != NULL)
-                    mark_job_as_running(j);
+                {
+                    mark_job_as_allocating(j);
+                }
             }
         }
         fflush(logfile);
@@ -274,12 +356,13 @@ void notify_client_to_run_job(struct Job *j, cpu_set_t cpus_to_occupy)
     if (conn == -1)
     {
         fprintf(logfile, "no connection for job %d\n", j->jobid);
-        remove_job(j->jobid, logfile);
+        remove_job(j->jobid);
         return;
     }
 
     struct Msg m;
     m.type = RunJob_S;
+    m.runjob.cpuset = cpus_to_occupy;
     send_msg(client_cs[conn].socket, &m);
 }
 
