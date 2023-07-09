@@ -14,10 +14,10 @@
 
 #define MAXCONN 100
 
-static char *path;
-static char *logpath;
-static FILE *logfile;
-static int nconnections;
+char *path;
+char *logpath;
+FILE *logfile;
+int nconnections;
 
 struct Client_conn
 {
@@ -26,34 +26,47 @@ struct Client_conn
     int jobid;
 };
 
-static struct Client_conn client_cs[MAXCONN];
+struct Client_conn client_cs[MAXCONN];
+cpu_set_t occupied_cpus;
+int available_cpu_num;
+int max_cpu_num;
 
-struct Job *init_job(int deadtime, int cpus_per_task)
+enum JobStatus s_create_job(int idx, struct Msg *m)
 {
-    struct Job *j = (struct Job *)malloc(sizeof(struct Job));
-    j->jobid = get_new_jobid();
-    j->deadtime = deadtime;
-    j->cpus_per_task = cpus_per_task;
-    j->status = Intializing;
-    return j;
-}
-
-enum JobStatus s_create_job(int s, struct Msg *m)
-{
-    struct Job *job = init_job(m->newjob.deadtime, m->newjob.cpus_per_task);
+    fprintf(logfile, "create job\n");
+    int s = client_cs[idx].socket;
+    enum JobStatus status = Initializing;
+    struct Job *job;
     int res;
-    fprintf(logfile, "%i\n", m->newjob.command_size);
-    if (m->newjob.command_size > 0)
-    {
-        job->command = (char *)malloc(m->newjob.command_size + 1);
-        res = recv_bytes(s, job->command, m->newjob.command_size);
-        if (res == -1)
-            fprintf(logfile, "wrong bytes received");
-        fprintf(logfile, "%s\n", job->command);
-    }
-    add_job(job);
+    struct Msg msg = default_msg();
 
-    return job->status;
+    if (m->newjob.cpus_per_task > max_cpu_num)
+    {
+        status = Failed;
+    }
+    else
+    {
+        status = Queued;
+
+        job = init_queued_job(m->newjob.deadtime, m->newjob.cpus_per_task);
+        if (m->newjob.command_size > 0)
+        {
+            job->command = (char *)malloc(m->newjob.command_size + 1);
+            res = recv_bytes(s, job->command, m->newjob.command_size);
+            if (res == -1)
+                fprintf(logfile, "wrong bytes received\n");
+            fprintf(logfile, "%s\n", job->command);
+        }
+        add_job(job, logfile);
+        client_cs[idx].hasjob = 1;
+        client_cs[idx].jobid = job->jobid;
+    }
+
+    msg.type = SubmitResponse_S;
+    msg.submit_response.job_status = status;
+    send_msg(s, &msg);
+    fflush(logfile);
+    return status;
 }
 
 enum MsgType client_read(int idx)
@@ -76,12 +89,13 @@ enum MsgType client_read(int idx)
     /* process message */
     switch (msg.type)
     {
-    case KillServer:
+    case KillServer_C:
         fprintf(logfile, "read kill server\n");
         break;
-    case SubmitJob:
+    case SubmitJob_C:
         fprintf(logfile, "read submit job\n");
-        s_create_job(client_cs[idx].socket, &msg);
+        enum JobStatus ret_s = s_create_job(idx, &msg);
+        fprintf(logfile, "job status: %d\n", ret_s);
         break;
     default:
         fprintf(logfile, "Unknown message type\n");
@@ -191,23 +205,30 @@ void server_loop(int socket)
                     //     clean_after_client_disappeared(client_cs[i].socket, i);
                     // }
 
-                    if (b == KillServer)
+                    if (b == KillServer_C)
                         keep_loop = 0;
                 }
             }
         }
 
-        // int client_socket = accept(socket, NULL, NULL);
-        // int res = client_read(client_socket);
-
-        // switch (res)
-        // {
-        // case KillServer:
-        //     fprintf(logfile, "server killed\n");
-        //     break;
-        // default:
-        //     fprintf(logfile, "Unknown message type\n");
-        // }
+        struct Job *j = get_next_job_to_run(available_cpu_num, logfile);
+        if (j != NULL)
+        {
+            fprintf(logfile, "try to run job %d\n", j->jobid);
+            cpu_set_t cpus_to_occupy = prepare_cpus(j->cpus_per_task);
+            if (CPU_COUNT(&cpus_to_occupy) == 0)
+            {
+                fprintf(logfile, "no available cpu\n");
+            }
+            else
+            {
+                fprintf(logfile, "occupy cpu: %d\n", CPU_COUNT(&cpus_to_occupy));
+                fflush(logfile);
+                notify_client_to_run_job(j, cpus_to_occupy);
+                if (j != NULL)
+                    mark_job_as_running(j);
+            }
+        }
         fflush(logfile);
     }
 
@@ -218,11 +239,12 @@ void end_server(int socket)
 {
     unlink(path);
     close(socket);
-    fclose(logfile);
 
     free(path);
     free(logpath);
-    remove_all_jobs();
+    remove_all_jobs(logfile);
+
+    fclose(logfile);
 }
 
 void notify_parent(int fd)
@@ -230,6 +252,62 @@ void notify_parent(int fd)
     char a = 'a';
     write(fd, &a, 1);
     close(fd);
+}
+
+int find_conn_of_job(int jobid)
+{
+    for (int i = 0; i < nconnections; i++)
+    {
+        if (client_cs[i].hasjob && client_cs[i].jobid == jobid)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void notify_client_to_run_job(struct Job *j, cpu_set_t cpus_to_occupy)
+{
+    int conn = find_conn_of_job(j->jobid);
+    if (conn == -1)
+    {
+        fprintf(logfile, "no connection for job %d\n", j->jobid);
+        remove_job(j, logfile);
+        return;
+    }
+
+    struct Msg m;
+    m.type = RunJob_S;
+    send_msg(client_cs[conn].socket, &m);
+}
+
+cpu_set_t prepare_cpus(int cpu_cnt)
+{
+    cpu_set_t cpus_to_occupy;
+    CPU_ZERO(&cpus_to_occupy);
+    for (int i = 0; i < max_cpu_num; i++)
+    {
+        if (!CPU_ISSET(i, &occupied_cpus))
+        {
+            CPU_CLR(i, &occupied_cpus);
+            CPU_SET(i, &cpus_to_occupy);
+            available_cpu_num--;
+            cpu_cnt--;
+            if (cpu_cnt == 0)
+            {
+                break;
+            }
+        }
+    }
+
+    if (cpu_cnt != 0)
+    {
+        fprintf(logfile, "no enough cpus\n");
+        fflush(logfile);
+        CPU_ZERO(&cpus_to_occupy);
+    }
+
+    return cpus_to_occupy;
 }
 
 void server_main(int notify_fd, char *_path)
@@ -240,6 +318,10 @@ void server_main(int notify_fd, char *_path)
     char *dirpath;
 
     path = _path;
+
+    max_cpu_num = sysconf(_SC_NPROCESSORS_CONF);
+    available_cpu_num = max_cpu_num;
+    CPU_ZERO(&occupied_cpus);
 
     /* Move the server to the socket directory */
     dirpath = malloc(strlen(path) + 1);

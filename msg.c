@@ -8,7 +8,8 @@
 
 #include "main.h"
 
-struct Msg default_msg() {
+struct Msg default_msg()
+{
     struct Msg m;
     memset(&m, 0, sizeof(struct Msg));
     return m;
@@ -66,10 +67,10 @@ void send_msg(const int fd, const struct Msg *m)
     res = send(fd, m, sizeof(*m), 0);
     if (res == -1 || res != sizeof(*m))
         perror("send_msg");
-        // fprintf(stdout, "Sending a message to %i, sent %i bytes, should "
-        //                 "send %i.",
-        //         fd,
-        //         res, sizeof(*m));
+    // fprintf(stdout, "Sending a message to %i, sent %i bytes, should "
+    //                 "send %i.",
+    //         fd,
+    //         res, sizeof(*m));
 }
 
 int recv_msg(const int fd, struct Msg *m)
@@ -78,47 +79,47 @@ int recv_msg(const int fd, struct Msg *m)
 
     res = recv(fd, m, sizeof(*m), 0);
     if (res == -1)
-        fprintf(stderr, "Receiving a message from %i.", fd);
+        fprintf(stderr, "Unknown error from %i.", fd);
     // if (res == sizeof(*m) && 0)
     //     msgdump(stderr, m);
     if (res != sizeof(*m) && res > 0)
         fprintf(stdout, "Receiving a message from %i, received %i bytes, "
-                       "should have received %i.",
-                    fd,
-                    res, sizeof(*m));
+                        "should have received %i.",
+                fd,
+                res, (int)sizeof(*m));
 
     return res;
 }
 
-void send_ints(const int fd, const int *data, int num)
-{
-    int res;
-    res = write(fd, &num, sizeof(int));
-    if (res == -1)
-        fprintf(stderr, "Sending to %i.", fd);
+// void send_ints(const int fd, const int *data, int num)
+// {
+//     int res;
+//     res = write(fd, &num, sizeof(int));
+//     if (res == -1)
+//         fprintf(stderr, "Sending to %i.", fd);
 
-    if (num)
-    {
-        res = write(fd, data, num * sizeof(int));
-        if (res == -1)
-            fprintf(stderr, "Sending %i bytes to %i.", num * sizeof(int), fd);
-    }
-}
+//     if (num)
+//     {
+//         res = write(fd, data, num * sizeof(int));
+//         if (res == -1)
+//             fprintf(stderr, "Sending %i bytes to %i.", num * sizeof(int), fd);
+//     }
+// }
 
-int *recv_ints(const int fd, int *num)
-{
-    int res;
-    res = read(fd, num, sizeof(int));
-    if (res == -1)
-        fprintf(stderr, "Receiving from %i.", fd);
+// int *recv_ints(const int fd, int *num)
+// {
+//     int res;
+//     res = read(fd, num, sizeof(int));
+//     if (res == -1)
+//         fprintf(stderr, "Receiving from %i.", fd);
 
-    int *data = 0;
-    if (*num)
-    {
-        data = (int *)malloc(*num * sizeof(int));
-        res = read(fd, data, sizeof(int) * *num);
-        if (res == -1)
-            fprintf(stderr, "Receiving %i bytes from %i.", sizeof(int) * *num, fd);
-    }
-    return data;
-}
+//     int *data = 0;
+//     if (*num)
+//     {
+//         data = (int *)malloc(*num * sizeof(int));
+//         res = read(fd, data, sizeof(int) * *num);
+//         if (res == -1)
+//             fprintf(stderr, "Receiving %d bytes from %i.", sizeof(int) * *num, fd);
+//     }
+//     return data;
+// }

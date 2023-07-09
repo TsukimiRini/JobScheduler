@@ -84,7 +84,7 @@ void c_shutdown_server(int server_socket)
 {
     struct Msg m;
 
-    m.type = KillServer;
+    m.type = KillServer_C;
     send_msg(server_socket, &m);
 }
 
@@ -93,7 +93,7 @@ void c_submit_job(int server_socket, char **command, struct Env **env, int deadt
     struct Msg m = default_msg();
     char *command_str = get_command(command, env);
 
-    m.type = SubmitJob;
+    m.type = SubmitJob_C;
     m.newjob.deadtime = deadtime;
     m.newjob.cpus_per_task = cpus_per_task;
     m.newjob.command_size = strlen(command_str);
@@ -101,5 +101,41 @@ void c_submit_job(int server_socket, char **command, struct Env **env, int deadt
     send_msg(server_socket, &m);
     send_bytes(server_socket, command_str, m.newjob.command_size);
 
+    recv_msg(server_socket, &m);
+    if (m.type != SubmitResponse_S)
+    {
+        fprintf(stderr, "Error: server did not respond with SubmitResponse_S\n");
+        exit(1);
+    }
+    if (m.submit_response.job_status == Queued)
+    {
+        printf("Job queued\n");
+        wait_for_server_command(server_socket);
+    }
+    else
+        printf("Job rejected\n");
+
     free(command_str);
+}
+
+void wait_for_server_command(int server_socket)
+{
+    struct Msg m;
+    int i;
+
+    int res = recv_msg(server_socket, &m);
+    if (res == 0)
+    {
+        printf("Server closed connection\n");
+        exit(0);
+    }
+    switch (m.type)
+    {
+    case RunJob_S:
+        printf("Job to run\n");
+        break;
+    default:
+        fprintf(stderr, "Error: server sent wrong command %d\n", m.type);
+        exit(1);
+    }
 }

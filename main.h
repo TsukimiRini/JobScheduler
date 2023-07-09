@@ -1,29 +1,26 @@
 #include <stdio.h>
+#include <unistd.h>
+#include <sched.h>
 
 enum MsgType
 {
-    KillServer = 0,
-    SubmitJob = 1,
-    GetJobStatus = 2,
-    CancelJob = 3,
-    Unknown = 4,
+    KillServer_C,
+    SubmitJob_C,
+    GetJobStatus_C,
+    CancelJob_C,
+    SubmitResponse_S,
+    RunJob_S,
+    Unknown,
 };
 
 enum JobStatus
 {
-    Intializing,
+    Initializing,
     Running,
     Finished,
     Failed,
     Canceled,
     Queued,
-    Pending,
-};
-
-enum SubmitStatus
-{
-    SubmitOk = 0,
-    SubmitFailed = 1,
 };
 
 struct Msg
@@ -41,12 +38,8 @@ struct Msg
         } newjob;
         struct
         {
-            int byte_size;
-            enum SubmitStatus submit_status;
+            enum JobStatus job_status;
         } submit_response;
-
-        int byte_size;
-        enum JobStatus status;
     };
 };
 
@@ -59,6 +52,7 @@ struct Job
     int deadtime;
     int cpus_per_task;
     char *command;
+    int pid;
 };
 
 struct Env
@@ -85,13 +79,20 @@ enum MsgType client_read(int client_socket);
 void server_loop(int socket);
 void end_server(int socket);
 void notify_parent(int fd);
+cpu_set_t prepare_cpus(int cpu_cnt);
+void notify_client_to_run_job(struct Job *j, cpu_set_t cpus_to_occupy);
 void server_main(int notify_fd, char *_path);
 
 // Path: client.c
 void c_shutdown_server(int server_socket);
 void c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
+void wait_for_server_command(int server_socket);
 
 // Path: jobs.c
 int get_new_jobid();
-void add_job(struct Job *j);
-void remove_all_jobs();
+struct Job *init_queued_job(int deadtime, int cpus_per_task);
+void add_job(struct Job *j, FILE *logfile);
+void remove_job(struct Job *j, FILE *logfile);
+void remove_all_jobs(FILE *logfile);
+struct Job *get_next_job_to_run(int free_cpu, FILE *log);
+void mark_job_as_running(struct Job *j);
