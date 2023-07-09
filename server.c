@@ -43,6 +43,7 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
     if (m->newjob.cpus_per_task > max_cpu_num)
     {
         status = Failed;
+        clean_after_client_disappeared(s, idx);
     }
     else
     {
@@ -124,30 +125,30 @@ static void remove_connection(int index)
 void clean_after_client_disappeared(int socket, int index)
 {
     /* Act as if the job ended. */
-    // int jobid = client_cs[index].jobid;
-    // if (client_cs[index].hasjob) {
-    //     struct Result r;
+    int jobid = client_cs[index].jobid;
+    if (client_cs[index].hasjob) {
+        // struct Result r;
 
-    //     r.errorlevel = -1;
-    //     r.died_by_signal = 1;
-    //     r.signal = SIGKILL;
-    //     r.user_ms = 0;
-    //     r.system_ms = 0;
-    //     r.real_ms = 0;
-    //     r.skipped = 0;
+        // r.errorlevel = -1;
+        // r.died_by_signal = 1;
+        // r.signal = SIGKILL;
+        // r.user_ms = 0;
+        // r.system_ms = 0;
+        // r.real_ms = 0;
+        // r.skipped = 0;
 
-    //     warning("JobID %i quit while running.", jobid);
-    //     job_finished(&r, jobid);
-    //     /* For the dependencies */
-    //     check_notify_list(jobid);
-    //     /* We don't want this connection to do anything
-    //      * more related to the jobid, secially on remove_connection
-    //      * when we receive the EOC. */
-    //     client_cs[index].hasjob = 0;
-    // } else
-    //     /* If it doesn't have a running job,
-    //      * it may well be a notification */
-    //     s_remove_notification(socket);
+        // warning("JobID %i quit while running.", jobid);
+        // job_finished(&r, jobid);
+        // /* For the dependencies */
+        // check_notify_list(jobid);
+        // /* We don't want this connection to do anything
+        //  * more related to the jobid, secially on remove_connection
+        //  * when we receive the EOC. */
+
+        // TODO
+        // cancel_job(jobid);
+        client_cs[index].hasjob = 0;
+    }
 
     close(socket);
     remove_connection(index);
@@ -334,7 +335,7 @@ void server_main(int notify_fd, char *_path)
     sprintf(logpath, "%s.log", path);
     logfile = fopen(logpath, "w");
 
-    fprintf(logfile, "%s", path);
+    fprintf(logfile, "max cpu num: %d\n", max_cpu_num);
     fflush(logfile);
 
     ls = socket(AF_UNIX, SOCK_STREAM, 0);
