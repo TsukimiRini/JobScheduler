@@ -25,7 +25,7 @@ void send_bytes(const int fd, const char *data, int bytes)
         res = send(fd, data + offset, bytes, 0);
         if (res == -1)
         {
-            fprintf(stderr, "Sending %i bytes to %i.", bytes, fd);
+            fprintf(stderr, "Sending %i bytes to %i.\n", bytes, fd);
             break;
         }
         if (res == bytes)
@@ -45,7 +45,7 @@ int recv_bytes(const int fd, char *data, int bytes)
         res = recv(fd, data + offset, bytes, 0);
         if (res == -1)
         {
-            fprintf(stderr, "Receiving %i bytes from %i.", bytes, fd);
+            fprintf(stderr, "Receiving %i bytes from %i.\n", bytes, fd);
             break;
         }
         if (res == bytes)
@@ -59,7 +59,7 @@ int recv_bytes(const int fd, char *data, int bytes)
 
 void send_msg(const int fd, const struct Msg *m)
 {
-    fprintf(stdout, "send msg");
+    fprintf(stdout, "send msg\n");
     int res;
 
     // if (0)
@@ -79,12 +79,12 @@ int recv_msg(const int fd, struct Msg *m)
 
     res = recv(fd, m, sizeof(*m), 0);
     if (res == -1)
-        fprintf(stderr, "Unknown error from %i.", fd);
+        fprintf(stderr, "Unknown error from %i.\n", fd);
     // if (res == sizeof(*m) && 0)
     //     msgdump(stderr, m);
     if (res != sizeof(*m) && res > 0)
         fprintf(stdout, "Receiving a message from %i, received %i bytes, "
-                        "should have received %i.",
+                        "should have received %i.\n",
                 fd,
                 res, (int)sizeof(*m));
 
