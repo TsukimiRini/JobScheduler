@@ -92,7 +92,11 @@ void handle_job_run(int idx, struct Msg *m)
     }
     else
     {
+        job->logfile = (char *)malloc(m->runjob_ok.logfname_size + 1);
+        recv_bytes(s, job->logfile, m->runjob_ok.logfname_size);
+        
         fprintf(logfile, "job found\n");
+        fprintf(logfile, "job logfile: %s\n", job->logfile);
         mark_job_as_running(job);
         job->pid = m->runjob_ok.pid;
         job->starttime = m->runjob_ok.starttime;

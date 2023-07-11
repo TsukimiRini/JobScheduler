@@ -63,6 +63,7 @@ struct Msg
         {
             int pid;
             struct timeval starttime;
+            int logfname_size;
         } runjob_ok;
         struct
         {
@@ -85,6 +86,7 @@ struct Job
     char *command;
     int pid;
     cpu_set_t occupied_cpus;
+    char *logfile;
 };
 
 struct Env
@@ -120,7 +122,7 @@ void server_main(int notify_fd, char *_path);
 // Path: client.c
 void c_shutdown_server(int server_socket);
 void c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
-struct Msg *wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env);
+void wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env);
 
 // Path: jobs.c
 int get_new_jobid();

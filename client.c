@@ -4,6 +4,10 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <time.h>
+#include <assert.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
 
 #include "main.h"
 #include "signals.c"
@@ -96,6 +100,27 @@ char *get_command(char **command, struct Env **env)
     return res;
 }
 
+static void fill_first_3_handles() {
+    int tmp_pipe1[2];
+    int tmp_pipe2[2];
+    /* This will fill handles 0 and 1 */
+    pipe(tmp_pipe1);
+    /* This will fill handles 2 and 3 */
+    pipe(tmp_pipe2);
+
+    close(tmp_pipe2[1]);
+}
+
+void create_closed_read_on(int dest) {
+    int p[2];
+    /* Closing input */
+    pipe(p);
+    close(p[1]); /* closing the write handle */
+    dup2(p[0], dest); /* the pipe reading goes to dest */
+    if (p[0] != dest)
+        close(p[0]);
+}
+
 void go_background()
 {
     int pid = fork();
@@ -109,6 +134,7 @@ void go_background()
         close(0);
         close(1);
         close(2);
+        fill_first_3_handles();
         setsid();
         break;
     default:
@@ -158,6 +184,26 @@ void c_submit_job(int server_socket, char **command, struct Env **env, int deadt
 void run_child(int outfd, char **command, struct Env **env)
 {
     struct timeval starttime;
+    int logfd, errfd;
+    char *cmd = get_cmd_str(command);
+    char *logfullname = (char *)malloc(strlen("/tmp/job.XXXXXX") + 1);
+    char *errfile = (char *)malloc(strlen(logfullname) + 3);
+
+    // stdout
+    strcpy(logfullname, "/tmp/job.XXXXXX");
+    logfd = mkstemp(logfullname);
+    fprintf(stdout, "logfullname: %s\n", logfullname);
+    assert(logfd != -1);
+    write(logfd, cmd, strlen(cmd));
+    write(logfd, "\n", 2);
+    free(cmd);
+    dup2(logfd, 1);
+    close(logfd);
+    // stderr
+    sprintf(errfile, "%s.e", logfullname);
+    errfd = open(errfile, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+    dup2(errfd, 2);
+    close(errfd);
 
     if (command == NULL)
     {
@@ -183,12 +229,16 @@ void run_child(int outfd, char **command, struct Env **env)
         }
     }
 
-    struct Msg m = default_msg();
-    m.type = RunJobOk_C;
-    m.runjob_ok.pid = getpid();
-
     gettimeofday(&starttime, NULL);
+    int logfullname_len = strlen(logfullname);
     write(outfd, &starttime, sizeof(struct timeval));
+    write(outfd, &logfullname_len, sizeof(int));
+    write(outfd, logfullname, strlen(logfullname) + 1);
+    free(logfullname);
+    close(outfd);
+
+    create_closed_read_on(0);
+    setsid();
 
     execvp(command[0], command);
 }
@@ -199,9 +249,13 @@ void run_parent(int outfd, int server_socket, int pid)
     int status;
     struct timeval starttime;
     struct timeval endtime;
-    int res;
+    int res, fname_len;
+    char *logfullname;
 
-    res = read(outfd, &starttime, sizeof(struct timeval));
+    read(outfd, &starttime, sizeof(struct timeval));
+    read(outfd, &fname_len, sizeof(int));
+    logfullname = (char *)malloc(fname_len);
+    res = read(outfd, logfullname, fname_len);
     if (res == -1)
     {
         fprintf(stderr, "Error: read failed\n");
@@ -220,7 +274,9 @@ void run_parent(int outfd, int server_socket, int pid)
     m.type = RunJobOk_C;
     m.runjob_ok.pid = pid;
     m.runjob_ok.starttime = starttime;
+    m.runjob_ok.logfname_size = fname_len;
     send_msg(server_socket, &m);
+    send_bytes(server_socket, logfullname, fname_len);
 
     close(outfd);
 
@@ -250,12 +306,10 @@ void run_parent(int outfd, int server_socket, int pid)
     send_msg(server_socket, &res_m);
 }
 
-struct Msg *run_job(int server_socket, char **command, struct Env **env)
+void run_job(int server_socket, char **command, struct Env **env)
 {
     int p[2];
     int pid;
-    // TODO
-    // char *logdir;
 
     block_sigint();
 
@@ -287,10 +341,11 @@ struct Msg *run_job(int server_socket, char **command, struct Env **env)
     }
 }
 
-struct Msg *wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env)
+void wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env)
 {
     struct Msg m;
     int i;
+    int logfname_size;
 
     int res = recv_msg(server_socket, &m);
     if (res == 0)
@@ -307,7 +362,9 @@ struct Msg *wait_for_server_command_and_then_execute(int server_socket, char **c
     if (m.type == RunJob_S)
     {
         printf("Job to run\n");
-        return run_job(server_socket, command, env);
+
+        run_job(server_socket, command, env);
+        return;
     }
     else
     {
