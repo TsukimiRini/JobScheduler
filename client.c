@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,6 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sched.h>
 
 #include "main.h"
 #include "signals.c"
@@ -100,7 +102,8 @@ char *get_command(char **command, struct Env **env)
     return res;
 }
 
-static void fill_first_3_handles() {
+static void fill_first_3_handles()
+{
     int tmp_pipe1[2];
     int tmp_pipe2[2];
     /* This will fill handles 0 and 1 */
@@ -111,11 +114,12 @@ static void fill_first_3_handles() {
     close(tmp_pipe2[1]);
 }
 
-void create_closed_read_on(int dest) {
+void create_closed_read_on(int dest)
+{
     int p[2];
     /* Closing input */
     pipe(p);
-    close(p[1]); /* closing the write handle */
+    close(p[1]);      /* closing the write handle */
     dup2(p[0], dest); /* the pipe reading goes to dest */
     if (p[0] != dest)
         close(p[0]);
@@ -306,7 +310,7 @@ void run_parent(int outfd, int server_socket, int pid)
     send_msg(server_socket, &res_m);
 }
 
-void run_job(int server_socket, char **command, struct Env **env)
+void run_job(int server_socket, char **command, struct Env **env, cpu_set_t cpuset)
 {
     int p[2];
     int pid;
@@ -319,7 +323,17 @@ void run_job(int server_socket, char **command, struct Env **env)
         exit(1);
     }
 
+    if (sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) == -1)
+    {
+        fprintf(stderr, "Error: sched_setaffinity failed\n");
+        exit(1);
+    }
+
     pid = fork();
+
+    sched_getaffinity(getpid(), sizeof(cpu_set_t), &cpuset);
+
+    fprintf(stdout, "cpu: %d\n", CPU_COUNT(&cpuset));
 
     switch (pid)
     {
@@ -363,7 +377,7 @@ void wait_for_server_command_and_then_execute(int server_socket, char **command,
     {
         printf("Job to run\n");
 
-        run_job(server_socket, command, env);
+        run_job(server_socket, command, env, m.runjob.cpuset);
         return;
     }
     else
