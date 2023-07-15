@@ -151,3 +151,12 @@ int submit_job(char **cmd)
     free_env();
     return 0;
 }
+
+int cancel_job(int jobid){
+    create_socket(&socket_path);
+    int res = try_connect(server_socket);
+    c_cancel_job(server_socket, jobid);
+
+    free_env();
+    return 0;
+}

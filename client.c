@@ -185,6 +185,54 @@ void c_submit_job(int server_socket, char **command, struct Env **env, int deadt
     free(command_str);
 }
 
+int c_cancel_job(int server_socket, int job_id)
+{
+    struct Msg m = default_msg();
+    struct Msg received = default_msg();
+
+    m.type = CancelJob_C;
+    m.canceljob.jobid = job_id;
+
+    send_msg(server_socket, &m);
+    recv_msg(server_socket, &received);
+    if (received.type != CancelResponse_S)
+    {
+        fprintf(stderr, "Error: server did not respond with CancelResponse_S, %d\n", received.type);
+        exit(1);
+    }
+    if (received.cancel_response.success == 1)
+        printf("Job cancelled\n");
+    else
+    {
+        switch (received.cancel_response.job_status)
+        {
+        case Initializing:
+        case Running:
+        case Queued:
+        case Allocating:
+            printf("Fail to cancel the job\n");
+            break;
+        case Failed:
+            printf("Job has failed\n");
+            break;
+        case Finished:
+            printf("Job has finished\n");
+            break;
+        case Cancelled:
+            printf("Job has been cancelled\n");
+            break;
+        case Null:
+            printf("Job does not exist\n");
+            break;
+        default:
+            printf("Job is in unknown state\n");
+            break;
+        }
+    }
+
+    return received.cancel_response.success;
+}
+
 void run_child(int outfd, char **command, struct Env **env)
 {
     struct timeval starttime;
@@ -271,12 +319,13 @@ void run_parent(int outfd, int server_socket, int pid)
         exit(1);
     }
 
+    signals_child_pid = pid;
     unblock_sigint_and_install_handler();
 
     fprintf(stdout, "Job started\n");
 
     m.type = RunJobOk_C;
-    m.runjob_ok.pid = pid;
+    m.runjob_ok.pid = getpid();
     m.runjob_ok.starttime = starttime;
     m.runjob_ok.logfname_size = fname_len;
     send_msg(server_socket, &m);
@@ -350,6 +399,7 @@ void run_job(int server_socket, char **command, struct Env **env, cpu_set_t cpus
         break;
     default:
         close(p[1]);
+        fprintf(stdout, "pid: %d\n", pid);
         run_parent(p[0], server_socket, pid);
         break;
     }
@@ -378,6 +428,11 @@ void wait_for_server_command_and_then_execute(int server_socket, char **command,
         printf("Job to run\n");
 
         run_job(server_socket, command, env, m.runjob.cpuset);
+        return;
+    }
+    else if (m.type == CancelJob_C)
+    {
+        printf("Job to cancel\n");
         return;
     }
     else

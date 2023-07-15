@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <sched.h>
+#include <signal.h>
 
 #include "main.h"
 
@@ -71,10 +72,81 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
     return status;
 }
 
-void finish_job(struct Job *job)
+void s_cancel_job(int idx, struct Msg *m)
+{
+    fprintf(logfile, "cancel job\n");
+    int s = client_cs[idx].socket;
+    int conn = find_conn_of_job(m->canceljob.jobid);
+    int socket_conn = client_cs[conn].socket;
+    struct Job *job = find_job(m->canceljob.jobid);
+    struct Msg msg = default_msg();
+
+    msg.type = CancelResponse_S;
+    msg.cancel_response.jobid = m->canceljob.jobid;
+
+    if (job == NULL)
+    {
+        fprintf(logfile, "job not found\n");
+        msg.cancel_response.job_status = Null;
+        msg.cancel_response.success = 0;
+        send_msg(s, &msg);
+    }
+    else
+    {
+        fprintf(logfile, "job found\n");
+        msg.cancel_response.job_status = job->status;
+        msg.cancel_response.pid = job->pid;
+
+        if (job->status != Finished && job->status != Failed && job->status != Cancelled)
+        {
+            if (job->pid == -1)
+            {
+                struct Msg cancel_msg = default_msg();
+                cancel_msg.type = CancelJob_S;
+                send_msg(socket_conn, &cancel_msg);
+                msg.cancel_response.success = 1;
+            }
+            else
+            {
+                int success = kill(job->pid, SIGTERM);
+                msg.cancel_response.success = (success == 0 ? 1 : 0);
+                if (success == -1)
+                {
+                    fprintf(logfile, "fail to kill job %d, pid: %d\n", job->jobid, job->pid);
+                }
+            }
+        }
+        else
+        {
+            msg.cancel_response.success = 0;
+        }
+    }
+
+    if (msg.cancel_response.success == 1)
+    {
+        mark_job_as_cancelled(job);
+        clean_up_job(job);
+        struct timeval endtime;
+        gettimeofday(&endtime, NULL);
+        job->endtime = endtime;
+
+        client_cs[conn].hasjob = 0;
+        clean_after_client_disappeared(socket_conn, conn);
+    }
+    else
+    {
+        msg.cancel_response.success = 0;
+    }
+    send_msg(s, &msg);
+    fprintf(logfile, "job cleaned\n");
+    fprintf(logfile, "msg type: %d\n", msg.type);
+    fflush(logfile);
+}
+
+void clean_up_job(struct Job *job)
 {
     fprintf(logfile, "finish job\n");
-    available_cpu_num += job->cpus_per_task;
+    available_cpu_num += CPU_COUNT(&job->occupied_cpus);
     CPU_XOR(&occupied_cpus, &job->occupied_cpus, &occupied_cpus);
     fprintf(logfile, "available cpu num: %d\n", available_cpu_num);
 }
@@ -94,7 +166,7 @@ void handle_job_run(int idx, struct Msg *m)
     {
         job->logfile = (char *)malloc(m->runjob_ok.logfname_size + 1);
         recv_bytes(s, job->logfile, m->runjob_ok.logfname_size);
-        
+
         fprintf(logfile, "job found\n");
         fprintf(logfile, "job logfile: %s\n", job->logfile);
         mark_job_as_running(job);
@@ -117,7 +189,7 @@ void handle_job_ended(int idx, struct Msg *m)
     else
     {
         mark_job_as_finished(job);
-        finish_job(job);
+        clean_up_job(job);
         job->endtime = m->job_ended.endtime;
         switch (m->job_ended.exit_status)
         {
@@ -180,6 +252,10 @@ enum MsgType client_read(int idx)
         fprintf(logfile, "read job ended\n");
         handle_job_ended(idx, &msg);
         break;
+    case CancelJob_C:
+        fprintf(logfile, "read cancel job\n");
+        s_cancel_job(idx, &msg);
+        break;
     default:
         fprintf(logfile, "Unknown message type\n");
         break;
@@ -229,7 +305,10 @@ void clean_after_client_disappeared(int socket, int index)
         //  * when we receive the EOC. */
 
         // TODO
-        // cancel_job(jobid);
+        struct Job *job = find_job(jobid);
+        kill(job->pid, SIGTERM);
+        mark_job_as_cancelled(job);
+        clean_up_job(job);
         client_cs[index].hasjob = 0;
     }
 
@@ -309,6 +388,7 @@ void server_loop(int socket)
             else
             {
                 fprintf(logfile, "occupy cpu: %d\n", CPU_COUNT(&cpus_to_occupy));
+                j->occupied_cpus = cpus_to_occupy;
                 fflush(logfile);
                 notify_client_to_run_job(j, cpus_to_occupy);
                 if (j != NULL)
@@ -378,7 +458,7 @@ cpu_set_t prepare_cpus(int cpu_cnt)
     {
         if (!CPU_ISSET(i, &occupied_cpus))
         {
-            CPU_CLR(i, &occupied_cpus);
+            CPU_SET(i, &occupied_cpus);
             CPU_SET(i, &cpus_to_occupy);
             available_cpu_num--;
             cpu_cnt--;
@@ -393,6 +473,7 @@ cpu_set_t prepare_cpus(int cpu_cnt)
     {
         fprintf(logfile, "no enough cpus\n");
         fflush(logfile);
+        CPU_XOR(&occupied_cpus, &cpus_to_occupy, &cpus_to_occupy);
         CPU_ZERO(&cpus_to_occupy);
     }
 

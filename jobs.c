@@ -1,6 +1,10 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sched.h>
 
 #include "main.h"
 
@@ -20,12 +24,24 @@ struct Job *init_queued_job(int deadtime, int cpus_per_task)
   j->deadtime = deadtime;
   j->cpus_per_task = cpus_per_task;
   j->status = Queued;
+  j->pid = -1;
+  CPU_ZERO(&j->occupied_cpus);
   return j;
 }
 
 struct Job *find_job(int jobid)
 {
   struct Job *cur = queued_jobs;
+  while (cur != NULL)
+  {
+    if (cur->jobid == jobid)
+    {
+      return cur;
+    }
+    cur = cur->next;
+  }
+
+  cur = finished_jobs;
   while (cur != NULL)
   {
     if (cur->jobid == jobid)
@@ -143,6 +159,11 @@ struct Job *get_next_job_to_run(int free_cpu, FILE *log)
   return NULL;
 }
 
+int kill_job_when_no_conn(struct Job *j)
+{
+  return kill(j->pid, SIGTERM);
+}
+
 void mark_job_as_allocating(struct Job *j)
 {
   j->status = Allocating;
@@ -156,6 +177,13 @@ void mark_job_as_running(struct Job *j)
 void mark_job_as_finished(struct Job *j)
 {
   j->status = Finished;
+  delete_job_from_queued(j);
+  add_job_to_finished(j);
+}
+
+void mark_job_as_cancelled(struct Job *j)
+{
+  j->status = Cancelled;
   delete_job_from_queued(j);
   add_job_to_finished(j);
 }

@@ -14,6 +14,7 @@ enum MsgType
     RunJobOk_C,
     JobEnded_C,
     SubmitResponse_S,
+    CancelResponse_S,
     RunJob_S,
     CancelJob_S,
     Unknown,
@@ -28,6 +29,7 @@ enum JobStatus
     Cancelled,
     Queued,
     Allocating,
+    Null,
 };
 
 enum ExitStatus
@@ -61,6 +63,10 @@ struct Msg
         } runjob;
         struct
         {
+            int jobid;
+        } canceljob;
+        struct
+        {
             int pid;
             struct timeval starttime;
             int logfname_size;
@@ -71,6 +77,13 @@ struct Msg
             enum ExitStatus exit_status;
             struct timeval endtime;
         } job_ended;
+        struct
+        {
+            int jobid;
+            enum JobStatus job_status;
+            int pid;
+            int success;
+        } cancel_response;
     };
 };
 
@@ -100,6 +113,7 @@ int server_up();
 int server_down();
 int close_socket();
 int submit_job(char **cmd);
+int cancel_job(int jobid);
 
 // Path: msg.c
 void send_bytes(const int fd, const char *data, int bytes);
@@ -109,6 +123,7 @@ int recv_msg(const int fd, struct Msg *m);
 struct Msg default_msg();
 
 // Path: server.c
+void clean_up_job(struct Job *job);
 enum MsgType client_read(int client_socket);
 void server_loop(int socket);
 void end_server(int socket);
@@ -122,6 +137,7 @@ void server_main(int notify_fd, char *_path);
 // Path: client.c
 void c_shutdown_server(int server_socket);
 void c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
+int c_cancel_job(int server_socket, int job_id);
 void wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env);
 
 // Path: jobs.c
@@ -135,3 +151,5 @@ struct Job *get_next_job_to_run(int free_cpu, FILE *log);
 void mark_job_as_allocating(struct Job *j);
 void mark_job_as_running(struct Job *j);
 void mark_job_as_finished(struct Job *j);
+void mark_job_as_cancelled(struct Job *j);
+int kill_job_when_no_conn(struct Job *j);

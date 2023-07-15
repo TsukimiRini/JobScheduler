@@ -8,7 +8,6 @@
 /* Some externs refer to this variable */
 static sigset_t normal_sigmask;
 
-/* as extern in execute.c */
 int signals_child_pid; /* 0, not set. otherwise, set. */
 
 void ignore_sigpipe()

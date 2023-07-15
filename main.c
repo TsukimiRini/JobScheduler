@@ -7,10 +7,10 @@
 int main(int argc, char **argv)
 {
     int ch;
-    char *op = "echo", *arg = "1";
+    char *op = "sleep", *arg = "10000";
     char **cmd = (char **)malloc(3 * sizeof(char *));
     cmd[0] = op, cmd[1] = arg;
-    while ((ch = getopt(argc, argv, "skn")) != -1)
+    while ((ch = getopt(argc, argv, "sknc:")) != -1)
     {
         switch (ch)
         {
@@ -22,6 +22,9 @@ int main(int argc, char **argv)
             break;
         case 'n':
             submit_job(cmd);
+            break;
+        case 'c':
+            cancel_job(atoi(optarg));
             break;
         }
     }
