@@ -29,7 +29,7 @@ char *get_cmd_str(char **command)
     if (cmd_str == NULL)
         return NULL;
 
-    strcat(cmd_str, command[0]);
+    strcpy(cmd_str, command[0]);
     for (i = 1; command[i] != NULL; i++)
     {
         strcat(cmd_str, " ");
@@ -47,7 +47,7 @@ char *append_each_env_str(char *env_str, struct Env *env)
     strcat(env_str, env->values[0]);
     for (int j = 1; env->values[j] != NULL; j++)
     {
-        strcat(env_str, ";");
+        strcat(env_str, ":");
         strcat(env_str, env->values[j]);
     }
 }
@@ -89,9 +89,12 @@ char *get_command(char **command, struct Env **env)
     int size = 0;
     char *command_str = get_cmd_str(command);
     char *env_str = get_env_str(env);
-    char *res = (char *)malloc((command_str ? strlen(command_str) : 0) + (env_str ? strlen(env_str) : 0) + 1);
+    char *res = (char *)malloc((command_str ? strlen(command_str) : 0) + (env_str ? strlen(env_str) + 1 : 0) + 1);
     if (env_str)
+    {
         strcat(res, env_str);
+        strcat(res, " ");
+    }
     if (command_str)
         strcat(res, command_str);
 
@@ -316,7 +319,7 @@ void run_child(int outfd, char **command, struct Env **env)
     fprintf(stdout, "logfullname: %s\n", logfullname);
     assert(logfd != -1);
     write(logfd, cmd, strlen(cmd));
-    write(logfd, "\n", 2);
+    write(logfd, "\n", 1);
     free(cmd);
     dup2(logfd, 1);
     close(logfd);
@@ -335,7 +338,7 @@ void run_child(int outfd, char **command, struct Env **env)
     {
         for (int i = 0; env[i] != NULL; i++)
         {
-            int env_size = 0;
+            int env_size = strlen(env[i]->key) + 1;
             for (int j = 0; env[i]->values[j] != NULL; j++)
                 env_size += strlen(env[i]->values[j]) + 1;
             char *env_str = (char *)malloc(env_size);
@@ -416,14 +419,17 @@ void run_parent(int outfd, int server_socket, int pid)
     if (WIFEXITED(status))
     {
         res_m.job_ended.exit_status = Return;
+        fprintf(stdout, "exit status: %s\n", "Return");
     }
     else if (WIFSIGNALED(status))
     {
         res_m.job_ended.exit_status = Signal;
+        fprintf(stdout, "exit status: %s\n", "Signal");
     }
     else
     {
         res_m.job_ended.exit_status = Error;
+        fprintf(stdout, "exit status: %s\n", "Error");
     }
     send_msg(server_socket, &res_m);
 }
@@ -441,13 +447,13 @@ void run_job(int server_socket, char **command, struct Env **env, cpu_set_t cpus
         exit(1);
     }
 
+    pid = fork();
+
     if (sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) == -1)
     {
         fprintf(stderr, "Error: sched_setaffinity failed\n");
         exit(1);
     }
-
-    pid = fork();
 
     sched_getaffinity(getpid(), sizeof(cpu_set_t), &cpuset);
 

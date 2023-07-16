@@ -7,8 +7,8 @@
 int main(int argc, char **argv)
 {
     int ch;
-    char *op = "sleep", *arg = "10000";
-    char **cmd = (char **)malloc(3 * sizeof(char *));
+    char *op = "sh", *arg = "test.sh";
+    char **cmd = (char **)malloc(2 * sizeof(char *));
     cmd[0] = op, cmd[1] = arg;
     while ((ch = getopt(argc, argv, "sknc:i:")) != -1)
     {
