@@ -29,6 +29,7 @@ enum JobStatus
     Cancelled,
     Queued,
     Allocating,
+    Timeout,
     Null,
 };
 
@@ -142,6 +143,7 @@ void wait_for_server_command_and_then_execute(int server_socket, char **command,
 
 // Path: jobs.c
 int get_new_jobid();
+struct Job* get_queued_job();
 struct Job *init_queued_job(int deadtime, int cpus_per_task);
 struct Job *find_job(int jobid);
 void add_job(struct Job *j, FILE *logfile);
@@ -152,4 +154,5 @@ void mark_job_as_allocating(struct Job *j);
 void mark_job_as_running(struct Job *j);
 void mark_job_as_finished(struct Job *j);
 void mark_job_as_cancelled(struct Job *j);
+void mark_job_as_timeout(struct Job *j);
 int kill_job_when_no_conn(struct Job *j);

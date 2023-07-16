@@ -221,6 +221,9 @@ int c_cancel_job(int server_socket, int job_id)
         case Cancelled:
             printf("Job has been cancelled\n");
             break;
+        case Timeout:
+            printf("Job has timed out\n");
+            break;
         case Null:
             printf("Job does not exist\n");
             break;

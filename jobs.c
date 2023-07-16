@@ -17,6 +17,10 @@ int get_new_jobid()
   return cur_id++;
 }
 
+struct Job* get_queued_job(){
+  return queued_jobs;
+}
+
 struct Job *init_queued_job(int deadtime, int cpus_per_task)
 {
   struct Job *j = (struct Job *)malloc(sizeof(struct Job));
@@ -184,6 +188,13 @@ void mark_job_as_finished(struct Job *j)
 void mark_job_as_cancelled(struct Job *j)
 {
   j->status = Cancelled;
+  delete_job_from_queued(j);
+  add_job_to_finished(j);
+}
+
+void mark_job_as_timeout(struct Job *j)
+{
+  j->status = Timeout;
   delete_job_from_queued(j);
   add_job_to_finished(j);
 }

@@ -143,6 +143,32 @@ void s_cancel_job(int idx, struct Msg *m)
     fflush(logfile);
 }
 
+void kill_timeout_jobs()
+{
+    struct Job *job = get_queued_job();
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    while (job != NULL)
+    {
+        if (job->status == Running && job->deadtime != 0)
+        {
+            if (now.tv_sec - job->starttime.tv_sec > job->deadtime)
+            {
+                int conn = find_conn_of_job(job->jobid);
+                fprintf(logfile, "job %d timeout, duration %f\n", job->jobid, now.tv_sec - job->starttime.tv_sec + now.tv_usec / 1000000.0 - job->starttime.tv_usec / 1000000.0);
+                kill(job->pid, SIGINT);
+                job->endtime = now;
+                mark_job_as_timeout(job);
+                clean_up_job(job);
+
+                client_cs[conn].hasjob = 0;
+                clean_after_client_disappeared(client_cs[conn].socket, conn);
+            }
+        }
+        job = job->next;
+    }
+}
+
 void clean_up_job(struct Job *job)
 {
     fprintf(logfile, "finish job\n");
@@ -173,7 +199,7 @@ void handle_job_run(int idx, struct Msg *m)
         job->pid = m->runjob_ok.pid;
         job->starttime = m->runjob_ok.starttime;
         fprintf(logfile, "job pid: %d\n", job->pid);
-        fprintf(logfile, "job starttime: %ld\n", job->starttime.tv_sec + job->starttime.tv_usec / 1000000);
+        fprintf(logfile, "job starttime: %f\n", job->starttime.tv_sec + job->starttime.tv_usec / 1000000.);
     }
     fflush(logfile);
 }
@@ -206,8 +232,8 @@ void handle_job_ended(int idx, struct Msg *m)
             fprintf(logfile, "Unknown exit status\n");
             break;
         }
-        fprintf(logfile, "job endtime: %ld\n", job->endtime.tv_sec + job->endtime.tv_usec / 1000000);
-        fprintf(logfile, "job duration: %ld\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000);
+        fprintf(logfile, "job endtime: %f\n", job->endtime.tv_sec + job->endtime.tv_usec / 1000000.);
+        fprintf(logfile, "job duration: %f\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000.);
     }
 
     clean_after_client_disappeared(s, idx);
@@ -326,6 +352,12 @@ void server_loop(int socket)
     int keep_loop = 1;
     while (keep_loop)
     {
+        struct timeval tv;
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+
+        kill_timeout_jobs();
+
         FD_ZERO(&readset);
         FD_SET(socket, &readset);
         maxfd = socket;
@@ -342,7 +374,7 @@ void server_loop(int socket)
                 maxfd = client_cs[i].socket;
         }
 
-        res = select(maxfd + 1, &readset, NULL, NULL, NULL);
+        res = select(maxfd + 1, &readset, NULL, NULL, &tv);
 
         if (res != -1)
         {
