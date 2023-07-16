@@ -161,7 +161,7 @@ struct Job *get_next_job_to_run(int free_cpu, FILE *log)
 
 int kill_job_when_no_conn(struct Job *j)
 {
-  return kill(j->pid, SIGTERM);
+  return kill(j->pid, SIGINT);
 }
 
 void mark_job_as_allocating(struct Job *j)

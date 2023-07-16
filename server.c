@@ -108,7 +108,7 @@ void s_cancel_job(int idx, struct Msg *m)
             }
             else
             {
-                int success = kill(job->pid, SIGTERM);
+                int success = kill(job->pid, SIGINT);
                 msg.cancel_response.success = (success == 0 ? 1 : 0);
                 if (success == -1)
                 {
@@ -306,7 +306,7 @@ void clean_after_client_disappeared(int socket, int index)
 
         // TODO
         struct Job *job = find_job(jobid);
-        kill(job->pid, SIGTERM);
+        kill(job->pid, SIGINT);
         mark_job_as_cancelled(job);
         clean_up_job(job);
         client_cs[index].hasjob = 0;
