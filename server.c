@@ -125,13 +125,13 @@ void s_cancel_job(int idx, struct Msg *m)
     if (msg.cancel_response.success == 1)
     {
         mark_job_as_cancelled(job);
-        clean_up_job(job);
-        struct timeval endtime;
-        gettimeofday(&endtime, NULL);
-        job->endtime = endtime;
+        // clean_up_job(job);
+        // struct timeval endtime;
+        // gettimeofday(&endtime, NULL);
+        // job->endtime = endtime;
 
-        client_cs[conn].hasjob = 0;
-        clean_after_client_disappeared(socket_conn, conn);
+        // client_cs[conn].hasjob = 0;
+        // clean_after_client_disappeared(socket_conn, conn);
     }
     else
     {
@@ -248,19 +248,21 @@ void handle_job_ended(int idx, struct Msg *m)
     }
     else
     {
-        mark_job_as_finished(job);
+        if (job->status != Cancelled){
+            mark_job_as_finished(job);
+        }
         clean_up_job(job);
         job->endtime = m->job_ended.endtime;
         switch (m->job_ended.exit_status)
         {
         case Return:
-            job->status = Finished;
+            // job->status = Finished;
             break;
         case Error:
             job->status = Failed;
             break;
         case Signal:
-            job->status = Cancelled;
+            // job->status = Cancelled;
             break;
         default:
             fprintf(logfile, "Unknown exit status\n");
@@ -270,6 +272,7 @@ void handle_job_ended(int idx, struct Msg *m)
         fprintf(logfile, "job duration: %f\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000.);
     }
 
+    client_cs[idx].hasjob = 0;
     clean_after_client_disappeared(s, idx);
     fflush(logfile);
 }
@@ -322,6 +325,7 @@ enum MsgType client_read(int idx)
         break;
     default:
         fprintf(logfile, "Unknown message type\n");
+        clean_after_client_disappeared(s, idx);
         break;
     }
 
