@@ -146,16 +146,27 @@ int submit_job(char **cmd)
 {
     create_socket(&socket_path);
     int res = try_connect(server_socket);
-    c_submit_job(server_socket, cmd, NULL, 1, 1);
+    c_submit_job(server_socket, cmd, NULL, 0, 1);
 
     free_env();
     return 0;
 }
 
-int cancel_job(int jobid){
+int cancel_job(int jobid)
+{
     create_socket(&socket_path);
     int res = try_connect(server_socket);
     c_cancel_job(server_socket, jobid);
+
+    free_env();
+    return 0;
+}
+
+int get_job_info(int jobid)
+{
+    create_socket(&socket_path);
+    int res = try_connect(server_socket);
+    c_get_job_info(server_socket, jobid);
 
     free_env();
     return 0;

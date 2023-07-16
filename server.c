@@ -143,6 +143,40 @@ void s_cancel_job(int idx, struct Msg *m)
     fflush(logfile);
 }
 
+void s_get_job_info(int idx, struct Msg *m)
+{
+    fprintf(logfile, "get job info\n");
+    int s = client_cs[idx].socket;
+    struct Job *job = find_job(m->getjobinfo.jobid);
+    struct Msg msg = default_msg();
+
+    msg.type = GetJobInfoResponse_S;
+
+    if (job == NULL)
+    {
+        fprintf(logfile, "job not found\n");
+        msg.getjobinfo_response.job_status = Null;
+        msg.getjobinfo_response.deadtime = -1;
+        msg.getjobinfo_response.cpus_per_task = -1;
+        msg.getjobinfo_response.cmd_size = -1;
+        msg.getjobinfo_response.logfname_size = -1;
+    }
+    else
+    {
+        fprintf(logfile, "job found\n");
+        msg.getjobinfo_response.job_status = job->status;
+        msg.getjobinfo_response.deadtime = job->deadtime;
+        msg.getjobinfo_response.cpus_per_task = job->cpus_per_task;
+        msg.getjobinfo_response.cmd_size = strlen(job->command);
+        msg.getjobinfo_response.logfname_size = strlen(job->logfile);
+    }
+    send_msg(s, &msg);
+    send_bytes(s, job->command, strlen(job->command));
+    send_bytes(s, job->logfile, strlen(job->logfile));
+    fprintf(logfile, "msg type: %d\n", msg.type);
+    fflush(logfile);
+}
+
 void kill_timeout_jobs()
 {
     struct Job *job = get_queued_job();
@@ -281,6 +315,10 @@ enum MsgType client_read(int idx)
     case CancelJob_C:
         fprintf(logfile, "read cancel job\n");
         s_cancel_job(idx, &msg);
+        break;
+    case GetJobInfo_C:
+        fprintf(logfile, "read get job status\n");
+        s_get_job_info(idx, &msg);
         break;
     default:
         fprintf(logfile, "Unknown message type\n");

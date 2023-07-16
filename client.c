@@ -236,6 +236,72 @@ int c_cancel_job(int server_socket, int job_id)
     return received.cancel_response.success;
 }
 
+void c_get_job_info(int server_socket, int job_id)
+{
+    struct Msg m = default_msg();
+    struct Msg received = default_msg();
+    char *cmd;
+    char *logfname;
+
+    m.type = GetJobInfo_C;
+    m.getjobinfo.jobid = job_id;
+
+    send_msg(server_socket, &m);
+    recv_msg(server_socket, &received);
+    if (received.type != GetJobInfoResponse_S)
+    {
+        fprintf(stderr, "Error: server did not respond with GetJobInfoResponse_S\n");
+        exit(1);
+    }
+    if (received.getjobinfo_response.job_status == Null)
+    {
+        printf("Job does not exist\n");
+        return;
+    }
+
+    cmd = (char *)malloc(received.getjobinfo_response.cmd_size + 1);
+    logfname = (char *)malloc(received.getjobinfo_response.logfname_size + 1);
+    recv_bytes(server_socket, cmd, received.getjobinfo_response.cmd_size);
+    recv_bytes(server_socket, logfname, received.getjobinfo_response.logfname_size);
+
+    printf("Job %d: ", job_id);
+    switch (received.getjobinfo_response.job_status)
+    {
+    case Initializing:
+        printf("Initializing\n");
+        break;
+    case Running:
+        printf("Running\n");
+        break;
+    case Queued:
+        printf("Queued\n");
+        break;
+    case Allocating:
+        printf("Allocating\n");
+        break;
+    case Failed:
+        printf("Failed\n");
+        break;
+    case Finished:
+        printf("Finished\n");
+        break;
+    case Cancelled:
+        printf("Cancelled\n");
+        break;
+    case Timeout:
+        printf("Timeout\n");
+        break;
+    default:
+        printf("Unknown\n");
+        break;
+    }
+    printf("Deadtime: %d\n", received.getjobinfo_response.deadtime);
+    printf("CPUs per task: %d\n", received.getjobinfo_response.cpus_per_task);
+    printf("Command: %s\n", cmd);
+    printf("Log file: %s\n", logfname);
+    printf("Error file: %s.e\n", logfname);
+}
+
 void run_child(int outfd, char **command, struct Env **env)
 {
     struct timeval starttime;

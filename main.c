@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     char *op = "sleep", *arg = "10000";
     char **cmd = (char **)malloc(3 * sizeof(char *));
     cmd[0] = op, cmd[1] = arg;
-    while ((ch = getopt(argc, argv, "sknc:")) != -1)
+    while ((ch = getopt(argc, argv, "sknc:i:")) != -1)
     {
         switch (ch)
         {
@@ -25,6 +25,9 @@ int main(int argc, char **argv)
             break;
         case 'c':
             cancel_job(atoi(optarg));
+            break;
+        case 'i':
+            get_job_info(atoi(optarg));
             break;
         }
     }
