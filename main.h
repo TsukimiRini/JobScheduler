@@ -88,15 +88,18 @@ struct Msg
             int pid;
             int success;
         } cancel_response;
-        struct {
+        struct
+        {
             int jobid;
         } getjobinfo;
-        struct {
+        struct
+        {
             int deadtime;
             int cpus_per_task;
             enum JobStatus job_status;
             int cmd_size;
             int logfname_size;
+            int env_size;
         } getjobinfo_response;
     };
 };
@@ -111,6 +114,7 @@ struct Job
     int deadtime;
     int cpus_per_task;
     char *command;
+    char *env;
     int pid;
     cpu_set_t occupied_cpus;
     char *logfile;
@@ -126,8 +130,8 @@ struct Env
 int server_up();
 int server_down();
 int close_socket();
-cJSON* submit_job(char **cmd);
-cJSON* cancel_job(int jobid);
+cJSON *submit_job(char **cmd);
+cJSON *cancel_job(int jobid);
 cJSON *get_job_info(int jobid);
 
 // Path: msg.c
@@ -151,14 +155,14 @@ void server_main(int notify_fd, char *_path);
 
 // Path: client.c
 void c_shutdown_server(int server_socket);
-cJSON* c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
-cJSON* c_cancel_job(int server_socket, int job_id);
+cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
+cJSON *c_cancel_job(int server_socket, int job_id);
 cJSON *c_get_job_info(int server_socket, int job_id);
 void wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env);
 
 // Path: jobs.c
 int get_new_jobid();
-struct Job* get_queued_job();
+struct Job *get_queued_job();
 struct Job *init_queued_job(int deadtime, int cpus_per_task);
 struct Job *find_job(int jobid);
 void add_job(struct Job *j, FILE *logfile);

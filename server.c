@@ -59,6 +59,15 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
                 fprintf(logfile, "wrong bytes received\n");
             fprintf(logfile, "%s\n", job->command);
         }
+
+        if (m->newjob.env_size > 0)
+        {
+            job->env = (char *)malloc(m->newjob.env_size + 1);
+            res = recv_bytes(s, job->env, m->newjob.env_size);
+            if (res == -1)
+                fprintf(logfile, "wrong bytes received\n");
+        }
+
         add_job(job, logfile);
         client_cs[idx].hasjob = 1;
         client_cs[idx].jobid = job->jobid;
@@ -169,10 +178,16 @@ void s_get_job_info(int idx, struct Msg *m)
         msg.getjobinfo_response.cpus_per_task = job->cpus_per_task;
         msg.getjobinfo_response.cmd_size = strlen(job->command);
         msg.getjobinfo_response.logfname_size = strlen(job->logfile);
+        if (job->env != NULL)
+            msg.getjobinfo_response.env_size = strlen(job->env);
+        else
+            msg.getjobinfo_response.env_size = 0;
     }
     send_msg(s, &msg);
     send_bytes(s, job->command, strlen(job->command));
     send_bytes(s, job->logfile, strlen(job->logfile));
+    if (job->env != NULL)
+        send_bytes(s, job->env, strlen(job->env));
     fprintf(logfile, "msg type: %d\n", msg.type);
     fflush(logfile);
 }
@@ -248,7 +263,8 @@ void handle_job_ended(int idx, struct Msg *m)
     }
     else
     {
-        if (job->status != Cancelled){
+        if (job->status != Cancelled)
+        {
             mark_job_as_finished(job);
         }
         clean_up_job(job);

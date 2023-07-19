@@ -162,15 +162,22 @@ cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int dea
 {
     struct Msg m = default_msg();
     char *command_str = get_command(command, env);
+    char *env_str = get_env_str(env);
     cJSON *response, *data;
 
     m.type = SubmitJob_C;
     m.newjob.deadtime = deadtime;
     m.newjob.cpus_per_task = cpus_per_task;
     m.newjob.command_size = strlen(command_str);
+    if (env_str)
+        m.newjob.env_size = strlen(env_str);
+    else
+        m.newjob.env_size = 0;
 
     send_msg(server_socket, &m);
     send_bytes(server_socket, command_str, m.newjob.command_size);
+    if (env_str)
+        send_bytes(server_socket, env_str, m.newjob.env_size);
 
     recv_msg(server_socket, &m);
     if (m.type != SubmitResponse_S)
@@ -272,7 +279,7 @@ cJSON *c_get_job_info(int server_socket, int job_id)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
-    char *cmd, *logfname, *errfname, *state;
+    char *cmd, *logfname, *env, *errfname, *state;
     cJSON *response, *data, *job_parameter, *job_log;
 
     m.type = GetJobInfo_C;
@@ -282,7 +289,7 @@ cJSON *c_get_job_info(int server_socket, int job_id)
     recv_msg(server_socket, &received);
     if (received.type != GetJobInfoResponse_S)
     {
-        fprintf(stderr, "Error: server did not respond with GetJobInfoResponse_S\n");
+        fprintf(stderr, "Error: server did not respond with GetJobInfoResponse_S, %d\n", received.type);
         response = cJSON_CreateObject();
         cJSON_AddNumberToObject(response, "code", 400);
         cJSON_AddStringToObject(response, "msg", "Server did not respond with GetJobInfoResponse_S");
@@ -301,8 +308,12 @@ cJSON *c_get_job_info(int server_socket, int job_id)
 
     cmd = (char *)malloc(received.getjobinfo_response.cmd_size + 1);
     logfname = (char *)malloc(received.getjobinfo_response.logfname_size + 1);
+    env = (char *)malloc(received.getjobinfo_response.env_size + 1);
+
     recv_bytes(server_socket, cmd, received.getjobinfo_response.cmd_size);
     recv_bytes(server_socket, logfname, received.getjobinfo_response.logfname_size);
+    if (received.getjobinfo_response.env_size > 0)
+        recv_bytes(server_socket, env, received.getjobinfo_response.env_size);
 
     switch (received.getjobinfo_response.job_status)
     {
@@ -345,7 +356,7 @@ cJSON *c_get_job_info(int server_socket, int job_id)
     cJSON_AddStringToObject(data, "state", state);
     job_parameter = cJSON_CreateObject();
     cJSON_AddStringToObject(job_parameter, "cmd", cmd);
-    // TODO: cJSON_AddStringToObject(job_parameter, "env", env);
+    cJSON_AddStringToObject(job_parameter, "env", env);
     cJSON_AddNumberToObject(job_parameter, "deadtime", received.getjobinfo_response.deadtime);
     cJSON_AddNumberToObject(job_parameter, "cpus_per_task", received.getjobinfo_response.cpus_per_task);
     cJSON_AddItemToObject(data, "job_parameter", job_parameter);
