@@ -158,7 +158,7 @@ void c_shutdown_server(int server_socket)
     send_msg(server_socket, &m);
 }
 
-cJSON* c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task)
+cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task)
 {
     struct Msg m = default_msg();
     char *command_str = get_command(command, env);
@@ -187,25 +187,27 @@ cJSON* c_submit_job(int server_socket, char **command, struct Env **env, int dea
         cJSON_AddNumberToObject(data, "job_id", m.submit_response.jobid);
         cJSON_AddItemToObject(response, "data", data);
         cJSON_AddNumberToObject(response, "code", 200);
-        cJSON_AddStringToObject(response, "message", "Job queued");
+        cJSON_AddStringToObject(response, "msg", "Job queued");
         // wait_for_server_command_and_then_execute(server_socket, command, env);
     }
-    else {
+    else
+    {
         printf("Job rejected\n");
         response = cJSON_CreateObject();
         cJSON_AddItemToObject(response, "data", NULL);
         cJSON_AddNumberToObject(response, "code", 400);
-        cJSON_AddStringToObject(response, "message", "Job rejected");
+        cJSON_AddStringToObject(response, "msg", "Job rejected");
     }
 
     free(command_str);
     return response;
 }
 
-int c_cancel_job(int server_socket, int job_id)
+cJSON *c_cancel_job(int server_socket, int job_id)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
+    cJSON *response, *data;
 
     m.type = CancelJob_C;
     m.canceljob.jobid = job_id;
@@ -218,47 +220,60 @@ int c_cancel_job(int server_socket, int job_id)
         exit(1);
     }
     if (received.cancel_response.success == 1)
+    {
         printf("Job cancelled\n");
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 200);
+        cJSON_AddStringToObject(response, "msg", "Job cancelled");
+        cJSON_AddItemToObject(response, "data", NULL);
+    }
     else
     {
+        char *msg;
         switch (received.cancel_response.job_status)
         {
         case Initializing:
         case Running:
         case Queued:
         case Allocating:
-            printf("Fail to cancel the job\n");
+            msg = "Fail to cancel the job";
             break;
         case Failed:
-            printf("Job has failed\n");
+            msg = "Job has failed";
             break;
         case Finished:
-            printf("Job has finished\n");
+            msg = "Job has finished";
             break;
         case Cancelled:
-            printf("Job has been cancelled\n");
+            msg = "Job has been cancelled";
             break;
         case Timeout:
-            printf("Job has timed out\n");
+            msg = "Job has timed out";
             break;
         case Null:
-            printf("Job does not exist\n");
+            msg = "Job does not exist";
             break;
         default:
-            printf("Job is in unknown state\n");
+            msg = "Job is in unknown state";
             break;
         }
+
+        printf("%s\n", msg);
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 400);
+        cJSON_AddStringToObject(response, "msg", msg);
+        cJSON_AddItemToObject(response, "data", NULL);
     }
 
-    return received.cancel_response.success;
+    return response;
 }
 
-void c_get_job_info(int server_socket, int job_id)
+cJSON *c_get_job_info(int server_socket, int job_id)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
-    char *cmd;
-    char *logfname;
+    char *cmd, *logfname, *errfname, *state;
+    cJSON *response, *data, *job_parameter, *job_log;
 
     m.type = GetJobInfo_C;
     m.getjobinfo.jobid = job_id;
@@ -268,12 +283,20 @@ void c_get_job_info(int server_socket, int job_id)
     if (received.type != GetJobInfoResponse_S)
     {
         fprintf(stderr, "Error: server did not respond with GetJobInfoResponse_S\n");
-        exit(1);
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 400);
+        cJSON_AddStringToObject(response, "msg", "Server did not respond with GetJobInfoResponse_S");
+        cJSON_AddItemToObject(response, "data", NULL);
+        return response;
     }
     if (received.getjobinfo_response.job_status == Null)
     {
         printf("Job does not exist\n");
-        return;
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 400);
+        cJSON_AddStringToObject(response, "msg", "Job does not exist");
+        cJSON_AddItemToObject(response, "data", NULL);
+        return response;
     }
 
     cmd = (char *)malloc(received.getjobinfo_response.cmd_size + 1);
@@ -281,42 +304,58 @@ void c_get_job_info(int server_socket, int job_id)
     recv_bytes(server_socket, cmd, received.getjobinfo_response.cmd_size);
     recv_bytes(server_socket, logfname, received.getjobinfo_response.logfname_size);
 
-    printf("Job %d: ", job_id);
     switch (received.getjobinfo_response.job_status)
     {
     case Initializing:
-        printf("Initializing\n");
+        state = "Initializing";
         break;
     case Running:
-        printf("Running\n");
+        state = "Running";
         break;
     case Queued:
-        printf("Queued\n");
+        state = "Queued";
         break;
     case Allocating:
-        printf("Allocating\n");
+        state = "Allocating";
         break;
     case Failed:
-        printf("Failed\n");
+        state = "Failed";
         break;
     case Finished:
-        printf("Finished\n");
+        state = "Finished";
         break;
     case Cancelled:
-        printf("Cancelled\n");
+        state = "Cancelled";
         break;
     case Timeout:
-        printf("Timeout\n");
+        state = "Timeout";
         break;
     default:
-        printf("Unknown\n");
+        state = "Unknown";
         break;
     }
-    printf("Deadtime: %d\n", received.getjobinfo_response.deadtime);
-    printf("CPUs per task: %d\n", received.getjobinfo_response.cpus_per_task);
-    printf("Command: %s\n", cmd);
-    printf("Log file: %s\n", logfname);
-    printf("Error file: %s.e\n", logfname);
+    errfname = (char *)malloc(strlen(logfname) + 3);
+    sprintf(errfname, "%s.e", logfname);
+
+    response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "code", 200);
+    cJSON_AddStringToObject(response, "msg", "Success");
+    data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "job_id", job_id);
+    cJSON_AddStringToObject(data, "state", state);
+    job_parameter = cJSON_CreateObject();
+    cJSON_AddStringToObject(job_parameter, "cmd", cmd);
+    // TODO: cJSON_AddStringToObject(job_parameter, "env", env);
+    cJSON_AddNumberToObject(job_parameter, "deadtime", received.getjobinfo_response.deadtime);
+    cJSON_AddNumberToObject(job_parameter, "cpus_per_task", received.getjobinfo_response.cpus_per_task);
+    cJSON_AddItemToObject(data, "job_parameter", job_parameter);
+    job_log = cJSON_CreateObject();
+    cJSON_AddStringToObject(job_log, "log_file", logfname);
+    cJSON_AddStringToObject(job_log, "err_file", errfname);
+    cJSON_AddItemToObject(data, "job_log", job_log);
+    cJSON_AddItemToObject(response, "data", data);
+
+    return response;
 }
 
 void run_child(int outfd, char **command, struct Env **env)

@@ -30,10 +30,18 @@ int main(int argc, char **argv)
             free(response_str);
             break;
         case 'c':
-            cancel_job(atoi(optarg));
+            response = cancel_job(atoi(optarg));
+            response_str = cJSON_Print(response);
+            fprintf(stdout, "%s\n", response_str);
+            cJSON_Delete(response);
+            free(response_str);
             break;
         case 'i':
-            get_job_info(atoi(optarg));
+            response = get_job_info(atoi(optarg));
+            response_str = cJSON_Print(response);
+            fprintf(stdout, "%s\n", response_str);
+            cJSON_Delete(response);
+            free(response_str);
             break;
         }
     }

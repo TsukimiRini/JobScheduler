@@ -150,8 +150,8 @@ cJSON* submit_job(char **cmd)
     if (res == -1)
     {
         response = cJSON_CreateObject();
-        cJSON_AddNumberToObject(response, "code", 502);
-        cJSON_AddStringToObject(response, "message", "server not up");
+        cJSON_AddNumberToObject(response, "code", 500);
+        cJSON_AddStringToObject(response, "msg", "server not up");
         return response;
     }
     response = c_submit_job(server_socket, cmd, NULL, 0, 1);
@@ -160,22 +160,38 @@ cJSON* submit_job(char **cmd)
     return response;
 }
 
-int cancel_job(int jobid)
+cJSON* cancel_job(int jobid)
 {
+    cJSON *response;
     create_socket(&socket_path);
     int res = try_connect(server_socket);
-    c_cancel_job(server_socket, jobid);
+    if (res == -1)
+    {
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 500);
+        cJSON_AddStringToObject(response, "msg", "server not up");
+        return response;
+    }
+    response = c_cancel_job(server_socket, jobid);
 
     free_env();
-    return 0;
+    return response;
 }
 
-int get_job_info(int jobid)
+cJSON *get_job_info(int jobid)
 {
+    cJSON *response;
     create_socket(&socket_path);
     int res = try_connect(server_socket);
-    c_get_job_info(server_socket, jobid);
+    if (res == -1)
+    {
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 500);
+        cJSON_AddStringToObject(response, "msg", "server not up");
+        return response;
+    }
+    response = c_get_job_info(server_socket, jobid);
 
     free_env();
-    return 0;
+    return response;
 }
