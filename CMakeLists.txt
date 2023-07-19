@@ -8,6 +8,7 @@ set(SOURCES
         server_ctl.c
         server.c
         msg.c
-        jobs.c)
+        jobs.c
+        cJSON.c)
 
 add_executable(job_scheduler main.c ${SOURCES})

@@ -142,14 +142,22 @@ int server_down()
     return 0;
 }
 
-int submit_job(char **cmd)
+cJSON* submit_job(char **cmd)
 {
+    cJSON *response;
     create_socket(&socket_path);
     int res = try_connect(server_socket);
-    c_submit_job(server_socket, cmd, NULL, 0, 1);
+    if (res == -1)
+    {
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 502);
+        cJSON_AddStringToObject(response, "message", "server not up");
+        return response;
+    }
+    response = c_submit_job(server_socket, cmd, NULL, 0, 1);
 
     free_env();
-    return 0;
+    return response;
 }
 
 int cancel_job(int jobid)

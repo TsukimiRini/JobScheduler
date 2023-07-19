@@ -128,7 +128,7 @@ void create_closed_read_on(int dest)
         close(p[0]);
 }
 
-void go_background()
+void go_background(int server_socket, char **command, struct Env **env)
 {
     int pid = fork();
 
@@ -143,9 +143,10 @@ void go_background()
         close(2);
         fill_first_3_handles();
         setsid();
-        break;
-    default:
+        wait_for_server_command_and_then_execute(server_socket, command, env);
         exit(0);
+    default:
+        return;
     }
 }
 
@@ -157,10 +158,11 @@ void c_shutdown_server(int server_socket)
     send_msg(server_socket, &m);
 }
 
-void c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task)
+cJSON* c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task)
 {
     struct Msg m = default_msg();
     char *command_str = get_command(command, env);
+    cJSON *response, *data;
 
     m.type = SubmitJob_C;
     m.newjob.deadtime = deadtime;
@@ -179,13 +181,25 @@ void c_submit_job(int server_socket, char **command, struct Env **env, int deadt
     if (m.submit_response.job_status == Queued)
     {
         printf("Job queued\n");
-        // go_background();
-        wait_for_server_command_and_then_execute(server_socket, command, env);
+        go_background(server_socket, command, env);
+        response = cJSON_CreateObject();
+        data = cJSON_CreateObject();
+        cJSON_AddNumberToObject(data, "job_id", m.submit_response.jobid);
+        cJSON_AddItemToObject(response, "data", data);
+        cJSON_AddNumberToObject(response, "code", 200);
+        cJSON_AddStringToObject(response, "message", "Job queued");
+        // wait_for_server_command_and_then_execute(server_socket, command, env);
     }
-    else
+    else {
         printf("Job rejected\n");
+        response = cJSON_CreateObject();
+        cJSON_AddItemToObject(response, "data", NULL);
+        cJSON_AddNumberToObject(response, "code", 400);
+        cJSON_AddStringToObject(response, "message", "Job rejected");
+    }
 
     free(command_str);
+    return response;
 }
 
 int c_cancel_job(int server_socket, int job_id)
