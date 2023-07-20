@@ -41,6 +41,7 @@ enum ExitStatus
     Return,
     Signal,
     Error,
+    OnCancel,
 };
 
 struct Msg

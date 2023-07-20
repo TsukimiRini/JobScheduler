@@ -224,7 +224,11 @@ cJSON *c_cancel_job(int server_socket, int job_id)
     if (received.type != CancelResponse_S)
     {
         fprintf(stderr, "Error: server did not respond with CancelResponse_S, %d\n", received.type);
-        exit(1);
+        response = cJSON_CreateObject();
+        cJSON_AddNumberToObject(response, "code", 500);
+        cJSON_AddStringToObject(response, "msg", "Server did not respond with CancelResponse_S");
+        cJSON_AddItemToObject(response, "data", NULL);
+        return response;
     }
     if (received.cancel_response.success == 1)
     {
@@ -279,8 +283,8 @@ cJSON *c_get_job_info(int server_socket, int job_id)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
-    char *cmd, *logfname, *env, *errfname, *state;
-    cJSON *response, *data, *job_parameter, *job_log;
+    char *cmd=NULL, *logfname=NULL, *env=NULL, *errfname=NULL, *state=NULL;
+    cJSON *response=NULL, *data=NULL, *job_parameter=NULL, *job_log=NULL;
 
     m.type = GetJobInfo_C;
     m.getjobinfo.jobid = job_id;
@@ -307,11 +311,23 @@ cJSON *c_get_job_info(int server_socket, int job_id)
     }
 
     cmd = (char *)malloc(received.getjobinfo_response.cmd_size + 1);
-    logfname = (char *)malloc(received.getjobinfo_response.logfname_size + 1);
-    env = (char *)malloc(received.getjobinfo_response.env_size + 1);
+    if (received.getjobinfo_response.logfname_size > 0)
+    {
+        logfname = (char *)malloc(received.getjobinfo_response.logfname_size + 1);
+        errfname = (char *)malloc(received.getjobinfo_response.logfname_size + 3);
+    }
+
+    if (received.getjobinfo_response.env_size > 0)
+        env = (char *)malloc(received.getjobinfo_response.env_size + 1);
 
     recv_bytes(server_socket, cmd, received.getjobinfo_response.cmd_size);
-    recv_bytes(server_socket, logfname, received.getjobinfo_response.logfname_size);
+    if (received.getjobinfo_response.logfname_size > 0)
+        recv_bytes(server_socket, logfname, received.getjobinfo_response.logfname_size);
+    if (received.getjobinfo_response.logfname_size > 0)
+    {
+        strcpy(errfname, logfname);
+        strcat(errfname, ".e");
+    }
     if (received.getjobinfo_response.env_size > 0)
         recv_bytes(server_socket, env, received.getjobinfo_response.env_size);
 
@@ -345,8 +361,6 @@ cJSON *c_get_job_info(int server_socket, int job_id)
         state = "Unknown";
         break;
     }
-    errfname = (char *)malloc(strlen(logfname) + 3);
-    sprintf(errfname, "%s.e", logfname);
 
     response = cJSON_CreateObject();
     cJSON_AddNumberToObject(response, "code", 200);
@@ -569,9 +583,14 @@ void wait_for_server_command_and_then_execute(int server_socket, char **command,
         run_job(server_socket, command, env, m.runjob.cpuset);
         return;
     }
-    else if (m.type == CancelJob_C)
+    else if (m.type == CancelJob_S)
     {
         printf("Job to cancel\n");
+        struct Msg res_m = default_msg();
+        res_m.type = JobEnded_C;
+        res_m.job_ended.pid = getpid();
+        res_m.job_ended.exit_status = OnCancel;
+        send_msg(server_socket, &res_m);
         return;
     }
     else

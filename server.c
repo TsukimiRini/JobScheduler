@@ -40,11 +40,31 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
     struct Job *job;
     int res;
     struct Msg msg = default_msg();
+    char *cmd, *env;
+
+    msg.type = SubmitResponse_S;
 
     if (m->newjob.cpus_per_task > max_cpu_num)
     {
-        status = Failed;
-        clean_after_client_disappeared(s, idx);
+        status = Null;
+        msg.submit_response.jobid = -1;
+        msg.submit_response.job_status = status;
+        if (m->newjob.command_size > 0)
+        {
+            cmd = (char *)malloc(m->newjob.command_size + 1);
+            res = recv_bytes(s, cmd, m->newjob.command_size);
+            if (res == -1)
+                fprintf(logfile, "wrong bytes received\n");
+            free(cmd);
+        }
+        if (m->newjob.env_size > 0)
+        {
+            env = (char *)malloc(m->newjob.env_size + 1);
+            int res = recv_bytes(s, env, m->newjob.env_size);
+            if (res == -1)
+                fprintf(logfile, "wrong bytes received\n");
+            free(env);
+        }
     }
     else
     {
@@ -71,12 +91,16 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
         add_job(job, logfile);
         client_cs[idx].hasjob = 1;
         client_cs[idx].jobid = job->jobid;
+        msg.submit_response.jobid = job->jobid;
+        msg.submit_response.job_status = status;
     }
 
-    msg.type = SubmitResponse_S;
-    msg.submit_response.jobid = job->jobid;
-    msg.submit_response.job_status = status;
     send_msg(s, &msg);
+
+    if (msg.submit_response.job_status != Queued)
+    {
+        clean_after_client_disappeared(s, idx);
+    }
     fflush(logfile);
     return status;
 }
@@ -98,7 +122,6 @@ void s_cancel_job(int idx, struct Msg *m)
         fprintf(logfile, "job not found\n");
         msg.cancel_response.job_status = Null;
         msg.cancel_response.success = 0;
-        send_msg(s, &msg);
     }
     else
     {
@@ -142,10 +165,6 @@ void s_cancel_job(int idx, struct Msg *m)
         // client_cs[conn].hasjob = 0;
         // clean_after_client_disappeared(socket_conn, conn);
     }
-    else
-    {
-        msg.cancel_response.success = 0;
-    }
     send_msg(s, &msg);
     fprintf(logfile, "job cleaned\n");
     fprintf(logfile, "msg type: %d\n", msg.type);
@@ -169,6 +188,7 @@ void s_get_job_info(int idx, struct Msg *m)
         msg.getjobinfo_response.cpus_per_task = -1;
         msg.getjobinfo_response.cmd_size = -1;
         msg.getjobinfo_response.logfname_size = -1;
+        msg.getjobinfo_response.env_size = -1;
     }
     else
     {
@@ -177,16 +197,21 @@ void s_get_job_info(int idx, struct Msg *m)
         msg.getjobinfo_response.deadtime = job->deadtime;
         msg.getjobinfo_response.cpus_per_task = job->cpus_per_task;
         msg.getjobinfo_response.cmd_size = strlen(job->command);
-        msg.getjobinfo_response.logfname_size = strlen(job->logfile);
+        if (job->logfile != NULL)
+            msg.getjobinfo_response.logfname_size = strlen(job->logfile);
+        else
+            msg.getjobinfo_response.logfname_size = 0;
         if (job->env != NULL)
             msg.getjobinfo_response.env_size = strlen(job->env);
         else
             msg.getjobinfo_response.env_size = 0;
     }
     send_msg(s, &msg);
-    send_bytes(s, job->command, strlen(job->command));
-    send_bytes(s, job->logfile, strlen(job->logfile));
-    if (job->env != NULL)
+    if (msg.getjobinfo_response.cmd_size > 0)
+        send_bytes(s, job->command, strlen(job->command));
+    if (msg.getjobinfo_response.logfname_size > 0)
+        send_bytes(s, job->logfile, strlen(job->logfile));
+    if (msg.getjobinfo_response.env_size > 0)
         send_bytes(s, job->env, strlen(job->env));
     fprintf(logfile, "msg type: %d\n", msg.type);
     fflush(logfile);
@@ -263,29 +288,28 @@ void handle_job_ended(int idx, struct Msg *m)
     }
     else
     {
+        fprintf(logfile, "job %d ended\n", job->jobid);
         if (job->status != Cancelled)
         {
             mark_job_as_finished(job);
+            job->endtime = m->job_ended.endtime;
+            fprintf(logfile, "job endtime: %f\n", job->endtime.tv_sec + job->endtime.tv_usec / 1000000.);
+            fprintf(logfile, "job duration: %f\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000.);
         }
         clean_up_job(job);
-        job->endtime = m->job_ended.endtime;
         switch (m->job_ended.exit_status)
         {
-        case Return:
-            // job->status = Finished;
-            break;
         case Error:
             job->status = Failed;
             break;
+        case Return:
         case Signal:
-            // job->status = Cancelled;
+        case OnCancel:
             break;
         default:
             fprintf(logfile, "Unknown exit status\n");
             break;
         }
-        fprintf(logfile, "job endtime: %f\n", job->endtime.tv_sec + job->endtime.tv_usec / 1000000.);
-        fprintf(logfile, "job duration: %f\n", job->endtime.tv_sec - job->starttime.tv_sec + (job->endtime.tv_usec - job->starttime.tv_usec) / 1000000.);
     }
 
     client_cs[idx].hasjob = 0;
