@@ -13,3 +13,5 @@ CMakeCache.txt
 job_scheduler
 Makefile
 .DS_Store
+
+test*
