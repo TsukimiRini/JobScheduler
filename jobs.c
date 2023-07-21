@@ -29,6 +29,7 @@ struct Job *init_queued_job(int deadtime, int cpus_per_task)
   j->cpus_per_task = cpus_per_task;
   j->status = Queued;
   j->pid = -1;
+  uuid_generate(j->uuid);
   CPU_ZERO(&j->occupied_cpus);
   return j;
 }
@@ -49,6 +50,30 @@ struct Job *find_job(int jobid)
   while (cur != NULL)
   {
     if (cur->jobid == jobid)
+    {
+      return cur;
+    }
+    cur = cur->next;
+  }
+  return NULL;
+}
+
+struct Job *find_job_uuid(uuid_t uuid)
+{
+  struct Job *cur = queued_jobs;
+  while (cur != NULL)
+  {
+    if (uuid_compare(cur->uuid, uuid) == 0)
+    {
+      return cur;
+    }
+    cur = cur->next;
+  }
+
+  cur = finished_jobs;
+  while (cur != NULL)
+  {
+    if (uuid_compare(cur->uuid, uuid) == 0)
     {
       return cur;
     }

@@ -7,7 +7,7 @@
 int main(int argc, char **argv)
 {
     int ch;
-    char *op = "sh", *arg = "test.sh";
+    char *op = "python", *arg = "test.py";
     char **cmd = (char **)malloc(2 * sizeof(char *));
     cJSON* response;
     char* response_str;
@@ -30,14 +30,14 @@ int main(int argc, char **argv)
             free(response_str);
             break;
         case 'c':
-            response = cancel_job(atoi(optarg));
+            response = cancel_job(optarg);
             response_str = cJSON_Print(response);
             fprintf(stdout, "%s\n", response_str);
             cJSON_Delete(response);
             free(response_str);
             break;
         case 'i':
-            response = get_job_info(atoi(optarg));
+            response = get_job_info(optarg);
             response_str = cJSON_Print(response);
             fprintf(stdout, "%s\n", response_str);
             cJSON_Delete(response);

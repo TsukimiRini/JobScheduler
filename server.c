@@ -25,6 +25,7 @@ struct Client_conn
     int socket;
     int hasjob;
     int jobid;
+    uuid_t uuid;
 };
 
 struct Client_conn client_cs[MAXCONN];
@@ -91,8 +92,10 @@ enum JobStatus s_create_job(int idx, struct Msg *m)
         add_job(job, logfile);
         client_cs[idx].hasjob = 1;
         client_cs[idx].jobid = job->jobid;
+        uuid_copy(client_cs[idx].uuid, job->uuid);
         msg.submit_response.jobid = job->jobid;
         msg.submit_response.job_status = status;
+        uuid_copy(msg.submit_response.uuid, job->uuid);
     }
 
     send_msg(s, &msg);
@@ -109,13 +112,13 @@ void s_cancel_job(int idx, struct Msg *m)
 {
     fprintf(logfile, "cancel job\n");
     int s = client_cs[idx].socket;
-    int conn = find_conn_of_job(m->canceljob.jobid);
+    int conn = find_conn_of_job_uuid(m->canceljob.uuid);
     int socket_conn = client_cs[conn].socket;
-    struct Job *job = find_job(m->canceljob.jobid);
+    struct Job *job = find_job_uuid(m->canceljob.uuid);
     struct Msg msg = default_msg();
 
     msg.type = CancelResponse_S;
-    msg.cancel_response.jobid = m->canceljob.jobid;
+    uuid_copy(msg.cancel_response.uuid, m->canceljob.uuid);
 
     if (job == NULL)
     {
@@ -175,7 +178,7 @@ void s_get_job_info(int idx, struct Msg *m)
 {
     fprintf(logfile, "get job info\n");
     int s = client_cs[idx].socket;
-    struct Job *job = find_job(m->getjobinfo.jobid);
+    struct Job *job = find_job_uuid(m->getjobinfo.uuid);
     struct Msg msg = default_msg();
 
     msg.type = GetJobInfoResponse_S;
@@ -548,6 +551,18 @@ int find_conn_of_job(int jobid)
     for (int i = 0; i < nconnections; i++)
     {
         if (client_cs[i].hasjob && client_cs[i].jobid == jobid)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int find_conn_of_job_uuid(uuid_t uuid)
+{
+    for (int i = 0; i < nconnections; i++)
+    {
+        if (client_cs[i].hasjob && uuid_compare(client_cs[i].uuid, uuid) == 0)
         {
             return i;
         }

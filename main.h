@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/times.h>
+#include <uuid/uuid.h>
 
 #include "cJSON.h"
 
@@ -61,6 +62,7 @@ struct Msg
         {
             int jobid;
             enum JobStatus job_status;
+            uuid_t uuid;
         } submit_response;
         struct
         {
@@ -68,7 +70,7 @@ struct Msg
         } runjob;
         struct
         {
-            int jobid;
+            uuid_t uuid;
         } canceljob;
         struct
         {
@@ -85,14 +87,14 @@ struct Msg
         } job_ended;
         struct
         {
-            int jobid;
+            uuid_t uuid;
             enum JobStatus job_status;
             int pid;
             int success;
         } cancel_response;
         struct
         {
-            int jobid;
+            uuid_t uuid;
         } getjobinfo;
         struct
         {
@@ -111,6 +113,7 @@ struct Job
     struct Job *next;
     enum JobStatus status;
     int jobid;
+    uuid_t uuid;
     struct timeval starttime;
     struct timeval endtime;
     int deadtime;
@@ -133,8 +136,8 @@ int server_up();
 int server_down();
 int close_socket();
 cJSON *submit_job(char **cmd);
-cJSON *cancel_job(int jobid);
-cJSON *get_job_info(int jobid);
+cJSON *cancel_job(char *uuid);
+cJSON *get_job_info(char *uuid);
 
 // Path: msg.c
 void send_bytes(const int fd, const char *data, int bytes);
@@ -149,6 +152,7 @@ enum MsgType client_read(int client_socket);
 void server_loop(int socket);
 void end_server(int socket);
 int find_conn_of_job(int jobid);
+int find_conn_of_job_uuid(uuid_t uuid);
 void clean_after_client_disappeared(int socket, int index);
 void notify_parent(int fd);
 cpu_set_t prepare_cpus(int cpu_cnt);
@@ -158,8 +162,8 @@ void server_main(int notify_fd, char *_path);
 // Path: client.c
 void c_shutdown_server(int server_socket);
 cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int deadtime, int cpus_per_task);
-cJSON *c_cancel_job(int server_socket, int job_id);
-cJSON *c_get_job_info(int server_socket, int job_id);
+cJSON *c_cancel_job(int server_socket, char *uuid);
+cJSON *c_get_job_info(int server_socket, char *uuid);
 void wait_for_server_command_and_then_execute(int server_socket, char **command, struct Env **env);
 
 // Path: jobs.c
@@ -167,6 +171,7 @@ int get_new_jobid();
 struct Job *get_queued_job();
 struct Job *init_queued_job(int deadtime, int cpus_per_task);
 struct Job *find_job(int jobid);
+struct Job *find_job_uuid(uuid_t uuid);
 void add_job(struct Job *j, FILE *logfile);
 void remove_job(int jobid);
 void remove_all_jobs(FILE *logfile);

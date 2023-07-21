@@ -12,3 +12,8 @@ set(SOURCES
         cJSON.c)
 
 add_executable(job_scheduler main.c ${SOURCES})
+
+find_path(LIBUUID_INCLUDE_DIR uuid.h PATH_SUFFIXES uuid)
+find_library(LIBUUID_LIBRARY libuuid.a)
+include_directories(${LIBUUID_INCLUDE_DIR})
+target_link_libraries(job_scheduler PUBLIC ${LIBUUID_LIBRARY})

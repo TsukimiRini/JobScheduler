@@ -164,6 +164,7 @@ cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int dea
     char *command_str = get_command(command, env);
     char *env_str = get_env_str(env);
     cJSON *response, *data;
+    char uuid_str[37];
 
     m.type = SubmitJob_C;
     m.newjob.deadtime = deadtime;
@@ -191,7 +192,8 @@ cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int dea
         go_background(server_socket, command, env);
         response = cJSON_CreateObject();
         data = cJSON_CreateObject();
-        cJSON_AddNumberToObject(data, "job_id", m.submit_response.jobid);
+        uuid_unparse(m.submit_response.uuid, uuid_str);
+        cJSON_AddStringToObject(data, "job_id", uuid_str);
         cJSON_AddItemToObject(response, "data", data);
         cJSON_AddNumberToObject(response, "code", 200);
         cJSON_AddStringToObject(response, "msg", "Job queued");
@@ -210,14 +212,14 @@ cJSON *c_submit_job(int server_socket, char **command, struct Env **env, int dea
     return response;
 }
 
-cJSON *c_cancel_job(int server_socket, int job_id)
+cJSON *c_cancel_job(int server_socket, char *uuid)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
     cJSON *response, *data;
 
     m.type = CancelJob_C;
-    m.canceljob.jobid = job_id;
+    uuid_parse(uuid, m.canceljob.uuid);
 
     send_msg(server_socket, &m);
     recv_msg(server_socket, &received);
@@ -279,15 +281,15 @@ cJSON *c_cancel_job(int server_socket, int job_id)
     return response;
 }
 
-cJSON *c_get_job_info(int server_socket, int job_id)
+cJSON *c_get_job_info(int server_socket, char *job_id)
 {
     struct Msg m = default_msg();
     struct Msg received = default_msg();
-    char *cmd=NULL, *logfname=NULL, *env=NULL, *errfname=NULL, *state=NULL;
-    cJSON *response=NULL, *data=NULL, *job_parameter=NULL, *job_log=NULL;
+    char *cmd = NULL, *logfname = NULL, *env = NULL, *errfname = NULL, *state = NULL;
+    cJSON *response = NULL, *data = NULL, *job_parameter = NULL, *job_log = NULL;
 
     m.type = GetJobInfo_C;
-    m.getjobinfo.jobid = job_id;
+    uuid_parse(job_id, m.getjobinfo.uuid);
 
     send_msg(server_socket, &m);
     recv_msg(server_socket, &received);
@@ -366,7 +368,7 @@ cJSON *c_get_job_info(int server_socket, int job_id)
     cJSON_AddNumberToObject(response, "code", 200);
     cJSON_AddStringToObject(response, "msg", "Success");
     data = cJSON_CreateObject();
-    cJSON_AddNumberToObject(data, "job_id", job_id);
+    cJSON_AddStringToObject(data, "job_id", job_id);
     cJSON_AddStringToObject(data, "state", state);
     job_parameter = cJSON_CreateObject();
     cJSON_AddStringToObject(job_parameter, "cmd", cmd);

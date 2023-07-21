@@ -160,7 +160,7 @@ cJSON* submit_job(char **cmd)
     return response;
 }
 
-cJSON* cancel_job(int jobid)
+cJSON* cancel_job(char *uuid)
 {
     cJSON *response;
     create_socket(&socket_path);
@@ -172,13 +172,13 @@ cJSON* cancel_job(int jobid)
         cJSON_AddStringToObject(response, "msg", "server not up");
         return response;
     }
-    response = c_cancel_job(server_socket, jobid);
+    response = c_cancel_job(server_socket, uuid);
 
     free_env();
     return response;
 }
 
-cJSON *get_job_info(int jobid)
+cJSON *get_job_info(char *uuid)
 {
     cJSON *response;
     create_socket(&socket_path);
@@ -190,7 +190,7 @@ cJSON *get_job_info(int jobid)
         cJSON_AddStringToObject(response, "msg", "server not up");
         return response;
     }
-    response = c_get_job_info(server_socket, jobid);
+    response = c_get_job_info(server_socket, uuid);
 
     free_env();
     return response;
