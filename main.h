@@ -81,6 +81,7 @@ struct Msg
             int pid;
             enum ExitStatus exit_status;
             struct timeval endtime;
+            int code;
         } job_ended;
         struct
         {

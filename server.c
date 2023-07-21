@@ -303,7 +303,14 @@ void handle_job_ended(int idx, struct Msg *m)
             job->status = Failed;
             break;
         case Return:
+            fprintf(logfile, "job %d exit status: %d, code: %d\n", job->jobid, m->job_ended.exit_status, m->job_ended.code);
+            if (m->job_ended.code != 0)
+                job->status = Failed;
+            break;
         case Signal:
+            fprintf(logfile, "job %d exit status: %d, signal: %d\n", job->jobid, m->job_ended.exit_status, m->job_ended.code);
+            job->status = Failed;
+            break;
         case OnCancel:
             break;
         default:

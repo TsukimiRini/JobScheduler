@@ -497,16 +497,19 @@ void run_parent(int outfd, int server_socket, int pid)
     if (WIFEXITED(status))
     {
         res_m.job_ended.exit_status = Return;
+        res_m.job_ended.code = WEXITSTATUS(status);
         fprintf(stdout, "exit status: %s\n", "Return");
     }
     else if (WIFSIGNALED(status))
     {
         res_m.job_ended.exit_status = Signal;
+        res_m.job_ended.code = WTERMSIG(status);
         fprintf(stdout, "exit status: %s\n", "Signal");
     }
     else
     {
         res_m.job_ended.exit_status = Error;
+        res_m.job_ended.code = -1;
         fprintf(stdout, "exit status: %s\n", "Error");
     }
     send_msg(server_socket, &res_m);
@@ -590,6 +593,7 @@ void wait_for_server_command_and_then_execute(int server_socket, char **command,
         res_m.type = JobEnded_C;
         res_m.job_ended.pid = getpid();
         res_m.job_ended.exit_status = OnCancel;
+        res_m.job_ended.code = 0;
         send_msg(server_socket, &res_m);
         return;
     }
