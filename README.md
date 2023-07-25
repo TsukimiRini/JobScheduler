@@ -80,6 +80,37 @@ int server_down();
 - 重复第二、三步直到所有的客户端操作已经完成。
 - 关闭服务端作业队列管理模块。
 
+### 如何测试
+
+此项目通过命令行的形式提供了对各个接口的简单测试方法。如果想以这种方式测试，可以通过以下步骤配置：
+
+- 在根目录编译项目，生成可执行文件。
+
+```shell
+cmake ./
+make
+```
+
+- 执行`job_scheduler`，传入`-s`flag启动服务端。
+
+```shell
+./job_scheduler -s
+```
+
+- 传入`-n`/`-c [jobid]`/`-i [jobid]`flag，分别可以提交作业/取消作业/查询作业。提交作业时传入的执行命令或运行环境需要在源码中修改。
+
+```shell
+./job_scheduler -s
+./job_scheduler -c 918f3c5e-92c3-4193-90df-469900fc1f09
+./job_scheduler -i 918f3c5e-92c3-4193-90df-469900fc1f09
+```
+
+- 传入`-k`flag关闭服务端。
+
+```shell
+./job_scheduler -k
+```
+
 ## 具体实现
 
 ### 基础框架

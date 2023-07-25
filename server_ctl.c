@@ -154,7 +154,7 @@ cJSON* submit_job(char **cmd)
         cJSON_AddStringToObject(response, "msg", "server not up");
         return response;
     }
-    response = c_submit_job(server_socket, cmd, NULL, 0, 1);
+    response = c_submit_job(server_socket, cmd, NULL, 2, 1);
 
     free_env();
     return response;

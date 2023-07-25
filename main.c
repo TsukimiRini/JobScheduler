@@ -7,7 +7,7 @@
 int main(int argc, char **argv)
 {
     int ch;
-    char *op = "python", *arg = "test.py";
+    char *op = "sleep", *arg = "10000";
     char **cmd = (char **)malloc(2 * sizeof(char *));
     cJSON* response;
     char* response_str;
